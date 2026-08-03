@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HoosLog — Coach Portal Mockups (Team Grid vs Card List)</title>
+<style>
+  :root{
+    --navy:#232D4B; --orange:#E57200; --orange-soft:#FDF1E5;
+    --bg:#EEF0F4; --card:#FFFFFF; --ink:#232D4B; --ink2:#5C6478; --muted:#98A0B0;
+    --line:#E6E8EE; --green:#2F7D4F; --green-soft:#EAF4EE; --navy-soft:#EDEFF5;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;gap:54px;
+    padding:48px 40px 64px;
+  }
+  .pagelabel{font-size:13px;font-weight:600;color:var(--ink2);letter-spacing:.04em;text-transform:uppercase;text-align:center;}
+  .pagelabel b{color:var(--navy);}
+  .caption{max-width:900px;text-align:center;font-size:13px;color:var(--ink2);line-height:1.5;margin-top:12px;}
+  .caption b{color:var(--navy);}
+  .col{display:flex;flex-direction:column;align-items:center;gap:14px;}
+
+  /* ---------- laptop frame ---------- */
+  .laptop{
+    width:1180px;background:var(--card);border-radius:18px;overflow:hidden;
+    box-shadow:0 24px 60px rgba(35,45,75,.18),0 2px 8px rgba(35,45,75,.08);
+    border:1px solid #DDE0E8;
+  }
+  .browserbar{height:30px;background:#E8EAF0;display:flex;align-items:center;gap:6px;padding:0 14px;}
+  .browserbar i{width:10px;height:10px;border-radius:50%;background:#C9CDD8;display:block;}
+  .browserbar span{margin-left:12px;font-size:11px;font-weight:600;color:var(--muted);}
+
+  /* ---------- coach header ---------- */
+  .apphead{background:var(--navy);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:28px;}
+  .wordmark{font-size:20px;font-weight:800;letter-spacing:-.01em;}
+  .wordmark span{color:var(--orange);}
+  .wordmark small{font-size:11px;font-weight:700;color:#B8C0D4;margin-left:8px;letter-spacing:.06em;}
+  .weeksel{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;}
+  .weeksel .arrow{width:24px;height:24px;border-radius:7px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:12px;}
+  .tabs{display:flex;gap:4px;margin-left:auto;}
+  .tabs div{font-size:13px;font-weight:700;color:#B8C0D4;padding:7px 14px;border-radius:9px;display:flex;align-items:center;gap:7px;}
+  .tabs div.on{background:rgba(255,255,255,.14);color:#fff;}
+  .badge{background:var(--orange);color:#fff;font-size:10.5px;font-weight:800;border-radius:10px;padding:1px 7px;}
+  .avatar{width:32px;height:32px;border-radius:50%;background:var(--orange);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-left:14px;}
+
+  /* ---------- alert strip ---------- */
+  .alert{
+    display:flex;align-items:center;gap:10px;background:var(--orange-soft);
+    border-bottom:1px solid #F3D9BE;padding:10px 24px;font-size:13px;font-weight:600;color:var(--ink);
+  }
+  .alert .zap{color:var(--orange);font-weight:800;}
+  .alert b{color:var(--orange);}
+  .alert .open{margin-left:auto;font-size:12px;font-weight:800;color:var(--orange);}
+
+  .main{padding:18px 24px 26px;background:#F7F8FA;}
+  .mainhead{display:flex;align-items:baseline;gap:14px;margin-bottom:12px;}
+  .mainhead h1{font-size:17px;font-weight:800;}
+  .mainhead .sub{font-size:12px;color:var(--muted);font-weight:600;}
+  .sorts{margin-left:auto;display:flex;gap:6px;}
+  .sorts div{font-size:11px;font-weight:700;color:var(--ink2);border:1.5px solid var(--line);background:#fff;border-radius:16px;padding:4px 11px;}
+  .sorts div.on{background:var(--navy);border-color:var(--navy);color:#fff;}
+
+  /* ---------- OPTION A: grid ---------- */
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+  thead th{
+    font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;
+    padding:9px 6px;border-bottom:1.5px solid var(--line);background:#FBFBFD;text-align:center;
+  }
+  thead th.ath{text-align:left;padding-left:14px;}
+  thead th.today{color:var(--orange);}
+  tbody td{padding:5.5px 6px;border-bottom:1px solid #F0F1F5;text-align:center;font-size:12.5px;font-weight:600;color:var(--ink);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:nth-child(even) td{background:#FBFBFD;}
+  td.ath{text-align:left;padding-left:14px;font-weight:700;white-space:nowrap;}
+  td.ath small{color:var(--muted);font-weight:700;font-size:10px;margin-left:6px;}
+  td .mi{display:inline-block;min-width:30px;}
+  td .flagged{color:var(--orange);font-weight:800;border-bottom:2px solid var(--orange);}
+  td .q{color:var(--orange);font-weight:800;}
+  td .miss{color:#C9CDD8;font-weight:700;}
+  td .todo{color:var(--muted);font-weight:600;font-size:10.5px;}
+  td.today-col{background:var(--orange-soft) !important;}
+  td.total{font-weight:800;white-space:nowrap;}
+  td.total small{color:var(--muted);font-weight:700;}
+  .rowbar{width:64px;height:6px;border-radius:4px;background:var(--navy-soft);display:inline-block;overflow:hidden;vertical-align:middle;}
+  .rowbar i{display:block;height:100%;background:var(--navy);border-radius:4px;}
+  .rowbar i.hot{background:var(--orange);}
+  .legend{display:flex;gap:22px;justify-content:center;margin-top:12px;font-size:11.5px;font-weight:600;color:var(--ink2);}
+  .legend b{color:var(--orange);}
+  .legend .grey{color:#C9CDD8;font-weight:800;}
+
+  /* ---------- OPTION B: cards ---------- */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .acard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 15px 12px;}
+  .acard.attn{border-color:var(--orange);box-shadow:0 0 0 1px var(--orange);}
+  .achead{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+  .aavatar{width:30px;height:30px;border-radius:50%;background:var(--navy);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;}
+  .aname{font-size:13.5px;font-weight:800;line-height:1.1;}
+  .agrp{font-size:10px;font-weight:700;color:var(--muted);margin-top:2px;}
+  .amiles{margin-left:auto;text-align:right;}
+  .amiles .n{font-size:15px;font-weight:800;color:var(--navy);line-height:1;}
+  .amiles .n small{font-size:10px;color:var(--muted);font-weight:700;}
+  .apbar{height:6px;border-radius:4px;background:var(--navy-soft);overflow:hidden;margin-bottom:9px;}
+  .apbar i{display:block;height:100%;background:var(--navy);border-radius:4px;}
+  .dots{display:flex;gap:5px;}
+  .dot{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .dot span{font-size:8.5px;font-weight:800;color:var(--muted);letter-spacing:.03em;}
+  .dot i{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;font-style:normal;}
+  .dot i.ok{background:var(--green-soft);color:var(--green);}
+  .dot i.flag{background:var(--orange);color:#fff;}
+  .dot i.q{background:var(--orange-soft);color:var(--orange);border:1.5px solid var(--orange);}
+  .dot i.miss{background:#F0F1F5;color:#C9CDD8;}
+  .dot i.todo{background:#fff;border:1.5px dashed var(--orange);color:var(--orange);}
+  .dot i.fut{background:#F7F8FA;border:1px solid var(--line);color:transparent;}
+  .afoot{margin-top:9px;font-size:11.5px;font-weight:600;color:var(--ink2);line-height:1.35;}
+  .afoot.hot{color:var(--orange);font-weight:700;}
+</style>
+</head>
+<body data-palette="#232D4B,#E57200">
+
+<!-- ================= OPTION A — TEAM GRID ================= -->
+<div class="col" id="optionA">
+  <div class="pagelabel"><b>Option A</b> · Coach Portal — Team Grid <span style="font-weight:400">(24 athletes · sample data · Thursday of the week)</span></div>
+  <div class="laptop">
+    <div class="browserbar"><i></i><i></i><i></i><span>hooslog.vercel.app/coach</span></div>
+    <div class="apphead">
+      <div class="wordmark">Hoos<span>Log</span><small>COACH</small></div>
+      <div class="weeksel"><span class="arrow">‹</span>Week of Sep 14 – 20<span class="arrow">›</span></div>
+      <div class="tabs">
+        <div class="on">Team</div>
+        <div>Inbox <span class="badge">3</span></div>
+        <div>Review <span class="badge">5</span></div>
+        <div>Plans</div>
+      </div>
+      <div class="avatar">CV</div>
+    </div>
+    <div class="alert">
+      <span class="zap">⚡</span>
+      <span>Today: <b>2 pain flags</b> — Brennan (achilles), Okafor (shin) · <b>1 question</b> — Sheets</span>
+      <span class="open">Open inbox →</span>
+    </div>
+    <div class="main">
+      <div class="mainhead">
+        <h1>Men's Distance — 24 athletes</h1>
+        <div class="sub">tap any row for the athlete's full week</div>
+      </div>
+      <table id="grid"></table>
+      <div class="legend">
+        <span>8.2 = miles logged</span>
+        <span><b>orange underline</b> = pain flag</span>
+        <span><b>?</b> = question for you</span>
+        <span><span class="grey">—</span> = not logged</span>
+        <span>am = today, not in yet</span>
+        <span>blank = upcoming</span>
+      </div>
+    </div>
+  </div>
+  <div class="caption"><b>Option A — the paper stack, one glance.</b> Every athlete × every day on one screen, today's column highlighted, flags impossible to miss. Densest view — built for a laptop; on a phone it scrolls sideways.</div>
+</div>
+
+<!-- ================= OPTION B — CARD LIST ================= -->
+<div class="col" id="optionB">
+  <div class="pagelabel"><b>Option B</b> · Coach Portal — Card List <span style="font-weight:400">(24 athletes · same data · sorted needs-attention first)</span></div>
+  <div class="laptop">
+    <div class="browserbar"><i></i><i></i><i></i><span>hooslog.vercel.app/coach</span></div>
+    <div class="apphead">
+      <div class="wordmark">Hoos<span>Log</span><small>COACH</small></div>
+      <div class="weeksel"><span class="arrow">‹</span>Week of Sep 14 – 20<span class="arrow">›</span></div>
+      <div class="tabs">
+        <div class="on">Team</div>
+        <div>Inbox <span class="badge">3</span></div>
+        <div>Review <span class="badge">5</span></div>
+        <div>Plans</div>
+      </div>
+      <div class="avatar">CV</div>
+    </div>
+    <div class="alert">
+      <span class="zap">⚡</span>
+      <span>Today: <b>2 pain flags</b> — Brennan (achilles), Okafor (shin) · <b>1 question</b> — Sheets</span>
+      <span class="open">Open inbox →</span>
+    </div>
+    <div class="main">
+      <div class="mainhead">
+        <h1>Men's Distance — 24 athletes</h1>
+        <div class="sub">tap any card for the athlete's full week</div>
+        <div class="sorts"><div class="on">Needs attention</div><div>A – Z</div><div>Mileage</div></div>
+      </div>
+      <div class="cards" id="cards"></div>
+    </div>
+  </div>
+  <div class="caption"><b>Option B — triage first.</b> One card per athlete, flags float to the top, day dots show the week's shape. Less data per glance than the grid, but works identically on the coach's phone. </div>
+</div>
+
+<script>
+// day states: n = miles logged ok · {f:mi} pain flag · {q:mi} question · 'x' missed · 't' today-not-yet · '.' future
+const T='t', X='x', F='.';
+const ROSTER=[
+  // [name, initials, group, planMi, [Mon,Tue,Wed,Thu,Fri,Sat,Sun]]
+  ['J. Alcott','JA',1,80,[9.2,11.4,7.1,9.0,F,F,F]],
+  ['T. Brennan','TB',1,78,[9.0,11.2,7.0,{f:8.2},F,F,F]],
+  ['C. Calloway','CC',1,76,[8.8,11.0,6.8,T,F,F,F]],
+  ['D. Eastman','DE',1,76,[8.8,10.6,7.2,8.6,F,F,F]],
+  ['R. Fenwick','RF',1,74,[8.6,10.8,X,8.4,F,F,F]],
+  ['M. Garrity','MG',1,74,[8.6,10.4,6.6,T,F,F,F]],
+  ['S. Hollis','SH',1,72,[8.2,10.2,6.8,8.2,F,F,F]],
+  ['K. Ivers','KI',2,70,[8.0,10.0,6.4,8.0,F,F,F]],
+  ['L. Jarvis','LJ',2,68,[7.8,9.8,6.2,T,F,F,F]],
+  ['P. Keane','PK',2,68,[7.8,9.6,X,X,F,F,F]],
+  ['N. Lachlan','NL',2,66,[7.6,9.4,6.0,7.6,F,F,F]],
+  ['M. Okafor','MO',2,66,[7.6,9.6,6.2,{f:5.0},F,F,F]],
+  ['B. Prentiss','BP',2,64,[7.4,9.2,6.0,T,F,F,F]],
+  ['A. Quill','AQ',2,64,[7.4,9.0,5.8,7.4,F,F,F]],
+  ['E. Rourke','ER',2,62,[X,X,X,X,F,F,F]],
+  ['W. Sheets','WS',2,62,[8.2,8.2,9.0,{q:7.1},F,F,F]],
+  ['G. Tilden','GT',3,58,[6.8,8.4,5.4,6.6,F,F,F]],
+  ['H. Ulrich','HU',3,56,[6.6,8.2,5.2,T,F,F,F]],
+  ['V. Vance','VV',3,56,[6.6,8.0,X,6.4,F,F,F]],
+  ['J. Whitfield','JW',3,54,[6.4,7.8,5.0,6.2,F,F,F]],
+  ['O. Yates','OY',3,52,[6.2,7.6,5.0,T,F,F,F]],
+  ['D. Zeller','DZ',3,52,[X,X,X,X,F,F,F]],
+  ['C. Marsh','CM',3,50,[6.0,7.2,4.8,6.0,F,F,F]],
+  ['T. Nolan','TN',3,50,[6.0,7.0,4.6,T,F,F,F]],
+];
+const FLAGNOTES={'T. Brennan':'Pain flag today — "achilles tight on the run"','M. Okafor':'Pain flag today — "right shin, cut it short"','W. Sheets':'Question — "flats or spikes for Saturday?"','E. Rourke':'Nothing logged yet — usually syncs Sunday','D. Zeller':'Nothing logged yet — usually syncs Sunday'};
+const DOW=['MON','TUE','WED','THU','FRI','SAT','SUN'];
+const TODAY=3;
+
+const mi=d=>typeof d==='number'?d:(d&&d.f)?d.f:(d&&d.q)?d.q:0;
+const actual=r=>r[4].reduce((s,d)=>s+mi(d),0);
+const fmt=n=>n.toFixed(1).replace(/\.0$/,'');
+
+// ---- Option A: grid ----
+let h='<thead><tr><th class="ath">Athlete</th>';
+DOW.forEach((d,i)=>h+=`<th${i===TODAY?' class="today"':''}>${d}</th>`);
+h+='<th>Week</th><th></th></tr></thead><tbody>';
+ROSTER.forEach(r=>{
+  const[name,ini,g,plan,days]=r,act=actual(r);
+  h+=`<tr><td class="ath">${name}<small>G${g}</small></td>`;
+  days.forEach((d,i)=>{
+    let cell;
+    if(typeof d==='number')cell=`<span class="mi">${fmt(d)}</span>`;
+    else if(d&&d.f)cell=`<span class="mi flagged">${fmt(d.f)}</span>`;
+    else if(d&&d.q)cell=`<span class="mi">${fmt(d.q)}<span class="q">?</span></span>`;
+    else if(d===X)cell='<span class="miss">—</span>';
+    else if(d===T)cell='<span class="todo">am</span>';
+    else cell='';
+    h+=`<td${i===TODAY?' class="today-col"':''}>${cell}</td>`;
+  });
+  const pct=Math.min(100,Math.round(act/plan*100));
+  h+=`<td class="total">${fmt(act)} <small>/ ${plan}</small></td><td><span class="rowbar"><i${pct<35?' class="hot"':''} style="width:${pct}%"></i></span></td></tr>`;
+});
+h+='</tbody>';
+document.getElementById('grid').innerHTML=h;
+
+// ---- Option B: cards, needs-attention sort ----
+const score=r=>{const n=r[0];if(FLAGNOTES[n]&&FLAGNOTES[n].startsWith('Pain'))return 0;if(FLAGNOTES[n]&&FLAGNOTES[n].startsWith('Question'))return 1;if(FLAGNOTES[n])return 2;return 3;};
+const sorted=[...ROSTER].sort((a,b)=>score(a)-score(b)||a[0].localeCompare(b[0]));
+let c='';
+sorted.forEach(r=>{
+  const[name,ini,g,plan,days]=r,act=actual(r),note=FLAGNOTES[name];
+  const attn=note&&(note.startsWith('Pain')||note.startsWith('Question'));
+  const pct=Math.min(100,Math.round(act/plan*100));
+  let dots='';
+  days.forEach((d,i)=>{
+    let cls,glyph='';
+    if(typeof d==='number'){cls='ok';glyph='✓';}
+    else if(d&&d.f){cls='flag';glyph='!';}
+    else if(d&&d.q){cls='q';glyph='?';}
+    else if(d===X){cls='miss';glyph='—';}
+    else if(d===T){cls='todo';glyph='·';}
+    else{cls='fut';}
+    dots+=`<div class="dot"><i class="${cls}">${glyph}</i><span>${DOW[i][0]}</span></div>`;
+  });
+  const foot=note?`<div class="afoot${attn?' hot':''}">${note}</div>`
+    :`<div class="afoot">${days.filter(d=>typeof d==='number'||(d&&(d.f||d.q))).length} of 4 days logged · on plan</div>`;
+  c+=`<div class="acard${attn?' attn':''}">
+    <div class="achead"><div class="aavatar">${ini}</div>
+      <div><div class="aname">${name}</div><div class="agrp">GROUP ${g}</div></div>
+      <div class="amiles"><div class="n">${fmt(act)} <small>/ ${plan} mi</small></div></div>
+    </div>
+    <div class="apbar"><i style="width:${pct}%"></i></div>
+    <div class="dots">${dots}</div>${foot}</div>`;
+});
+document.getElementById('cards').innerHTML=c;
+</script>
+</body>
+</html>

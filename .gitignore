@@ -1,0 +1,14 @@
+# deps / build (arrive with the app scaffold)
+node_modules/
+.next/
+out/
+.vercel/
+
+# env — real values never committed
+.env*
+!.env.example
+
+# os / editor noise
+.DS_Store
+Thumbs.db
+*.log

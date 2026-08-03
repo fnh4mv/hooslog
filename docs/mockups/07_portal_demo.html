@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HoosLog — Interactive Demo</title>
+<style>
+  :root{
+    --navy:#232D4B; --orange:#E57200; --orange-soft:#FDF1E5;
+    --bg:#EEF0F4; --card:#FFFFFF; --ink:#232D4B; --ink2:#5C6478; --muted:#98A0B0;
+    --line:#E6E8EE; --green:#2F7D4F; --green-soft:#EAF4EE; --navy-soft:#EDEFF5;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;gap:14px;
+    padding:34px 16px 60px;min-height:100vh;
+  }
+  .demohint{font-size:12.5px;font-weight:600;color:var(--ink2);}
+  .demohint b{color:var(--navy);}
+  .phone{
+    width:390px;max-width:100%;background:var(--card);border-radius:44px;overflow:hidden;
+    box-shadow:0 24px 60px rgba(35,45,75,.18),0 2px 8px rgba(35,45,75,.08);
+    border:1px solid #DDE0E8;display:flex;flex-direction:column;
+  }
+  .statusbar{height:34px;display:flex;justify-content:space-between;align-items:center;
+    padding:0 24px;font-size:12px;font-weight:600;color:#fff;background:var(--navy);}
+  .statusbar .icons{letter-spacing:2px;font-size:11px;opacity:.9;}
+  .apphead{background:var(--navy);color:#fff;padding:10px 20px 16px;
+    display:flex;justify-content:space-between;align-items:center;}
+  .wordmark{font-size:20px;font-weight:800;}
+  .wordmark span{color:var(--orange);}
+  .avatar{width:32px;height:32px;border-radius:50%;background:var(--orange);color:#fff;
+    font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .view{display:none;padding:16px 16px 20px;flex-direction:column;gap:12px;background:#F7F8FA;}
+  .view.on{display:flex;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;}
+  .cardlabel{font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+  button{font:inherit;border:none;background:none;color:inherit;cursor:pointer;}
+  /* day strip */
+  .weekline{display:flex;justify-content:space-between;align-items:baseline;margin:2px 2px 0;}
+  .weekline .wk{font-size:14px;font-weight:700;}
+  .weekline .due{font-size:11px;font-weight:600;color:var(--orange);}
+  .daystrip{display:flex;gap:6px;}
+  .day{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+    padding:7px 0 6px;border-radius:12px;background:var(--card);border:1.5px solid var(--line);}
+  .day .dw{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;}
+  .day .dn{font-size:13px;font-weight:700;color:var(--ink);}
+  .day .st{font-size:9px;line-height:1;height:9px;color:var(--green);font-weight:800;}
+  .day.sel{border-color:var(--navy);background:var(--navy-soft);}
+  .day.istoday{background:var(--orange);border-color:var(--orange);}
+  .day.istoday .dw,.day.istoday .dn{color:#fff;}
+  .day.istoday .st{color:#fff;font-weight:600;}
+  .day.istoday.sel{outline:2.5px solid var(--navy);outline-offset:1px;}
+  /* plan */
+  .plan{border-left:4px solid var(--navy);}
+  .planrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .chip{font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:20px;background:var(--navy-soft);color:var(--navy);}
+  .chip.am{background:var(--orange-soft);color:var(--orange);}
+  .plantitle{font-size:16px;font-weight:700;line-height:1.3;}
+  .planmeta{font-size:12.5px;color:var(--ink2);margin-top:5px;}
+  /* inputs */
+  .inrow{display:flex;gap:10px;}
+  .field{flex:1;}
+  .field label{display:block;font-size:11px;font-weight:600;color:var(--ink2);margin-bottom:4px;}
+  .inputwrap{border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;background:#fff;
+    display:flex;justify-content:space-between;align-items:baseline;gap:6px;}
+  .inputwrap:focus-within{border-color:var(--navy);}
+  .inputwrap input{border:none;outline:none;width:100%;font-size:15px;font-weight:600;color:var(--ink);font-family:inherit;background:transparent;}
+  .inputwrap .unit{font-size:11px;color:var(--muted);font-weight:600;flex:none;}
+  .autopace{margin-top:8px;font-size:12px;color:var(--ink2);}
+  .autopace b{color:var(--navy);}
+  /* rpe */
+  .rpe{display:flex;gap:5px;}
+  .rpe button{flex:1;text-align:center;padding:8px 0;border-radius:9px;border:1.5px solid var(--line);
+    font-size:12.5px;font-weight:700;color:var(--ink2);background:#fff;}
+  .rpe button.on{background:var(--orange);border-color:var(--orange);color:#fff;}
+  .rpecap{margin-top:7px;font-size:12px;color:var(--ink2);min-height:15px;}
+  .rpecap b{color:var(--orange);}
+  /* toggles + text */
+  .togglerow{display:flex;justify-content:space-between;align-items:center;}
+  .togglerow .t{font-size:14px;font-weight:700;}
+  .switch{width:40px;height:23px;border-radius:20px;background:#D6DAE2;position:relative;flex:none;transition:background .15s;}
+  .switch::after{content:"";position:absolute;top:2.5px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s;}
+  .switch.on{background:var(--orange);}
+  .switch.on::after{transform:translateX(16px);}
+  textarea.textin,input.textin{
+    width:100%;margin-top:9px;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;
+    font-size:13.5px;line-height:1.45;color:var(--ink);background:#fff;font-family:inherit;outline:none;resize:none;}
+  .textin:focus{border-color:var(--navy);}
+  .hideable{display:none;}
+  .hideable.on{display:block;}
+  .seenote{margin-top:8px;display:none;align-items:center;gap:6px;font-size:11.5px;font-weight:700;
+    color:var(--orange);background:var(--orange-soft);border-radius:8px;padding:5px 9px;}
+  .seenote.on{display:inline-flex;}
+  /* save */
+  .save{background:var(--navy);color:#fff;text-align:center;border-radius:14px;width:100%;
+    padding:15px;font-size:15px;font-weight:700;box-shadow:0 4px 14px rgba(35,45,75,.25);transition:background .15s;}
+  .save.saved{background:var(--green);}
+  .savecap{text-align:center;font-size:12px;color:var(--ink2);margin-top:-2px;}
+  .savecap b{color:var(--navy);}
+  /* dashboard */
+  .hello{display:flex;justify-content:space-between;align-items:center;margin:2px 2px 0;}
+  .hello h1{font-size:19px;font-weight:800;}
+  .hello .sub{font-size:12px;color:var(--ink2);margin-top:2px;}
+  .duechip{font-size:11px;font-weight:700;color:var(--orange);border:1.5px solid var(--orange);border-radius:20px;padding:4px 10px;background:#fff;}
+  .tiles{display:flex;gap:10px;}
+  .tile{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 6px 10px;text-align:center;}
+  .tile .n{font-size:19px;font-weight:800;color:var(--navy);}
+  .tile .n small{font-size:11px;font-weight:700;color:var(--muted);}
+  .tile .l{font-size:10px;font-weight:600;color:var(--ink2);margin-top:2px;line-height:1.3;}
+  .tile.hot .n{color:var(--orange);}
+  .wrow{display:flex;align-items:center;gap:10px;padding:7.5px 0;border-bottom:1px solid #F0F1F5;width:100%;text-align:left;}
+  .wrow:last-of-type{border-bottom:none;}
+  .wrow .d{width:34px;font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.03em;flex:none;}
+  .wrow .s{flex:1;font-size:13px;font-weight:600;color:var(--ink);}
+  .wrow .s small{display:block;font-size:11px;font-weight:500;color:var(--muted);margin-top:1px;}
+  .done{width:20px;height:20px;border-radius:50%;background:var(--green-soft);color:var(--green);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;}
+  .logbtn{font-size:11px;font-weight:800;color:#fff;background:var(--orange);border-radius:16px;padding:5px 12px;flex:none;}
+  .upc{font-size:10.5px;font-weight:700;color:var(--muted);flex:none;}
+  .wrow.today .d,.wrow.today .s,.wrow.today .s small{color:var(--orange);}
+  .submit{margin-top:11px;text-align:center;border:1.5px dashed #C9CDD8;border-radius:11px;width:100%;
+    padding:9px;font-size:12px;font-weight:700;color:var(--muted);}
+  /* mileage */
+  .mline{display:flex;justify-content:space-between;align-items:baseline;}
+  .mline .big{font-size:21px;font-weight:800;color:var(--navy);}
+  .mline .big small{font-size:12px;color:var(--muted);font-weight:700;}
+  .mline .pct{font-size:12px;font-weight:700;color:var(--ink2);}
+  .pbar{height:8px;border-radius:6px;background:var(--navy-soft);margin:9px 0 16px;overflow:hidden;}
+  .pbar div{height:100%;border-radius:6px;background:var(--navy);transition:width .3s;}
+  .chart{display:flex;align-items:flex-end;gap:7px;height:86px;padding-top:14px;}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;}
+  .bar i{display:block;width:100%;background:var(--navy);border-radius:4px 4px 2px 2px;transition:height .3s;}
+  .bar.now i{background:var(--orange);}
+  .bar b{font-size:10px;font-weight:800;color:var(--ink2);line-height:1;}
+  .bar.now b{color:var(--orange);}
+  .bar span{font-size:9.5px;font-weight:600;color:var(--muted);line-height:1;}
+  .chartcap{font-size:11px;color:var(--muted);margin-top:9px;}
+  /* feedback */
+  .fitem{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid #F0F1F5;}
+  .fitem:last-child{border-bottom:none;padding-bottom:2px;}
+  .favatar{width:28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;}
+  .fbody{flex:1;}
+  .fmeta{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:2px;}
+  .ftext{font-size:12.5px;line-height:1.45;color:var(--ink);}
+  .fans{display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:10.5px;font-weight:800;color:var(--green);background:var(--green-soft);padding:3px 8px;border-radius:14px;}
+  /* nav */
+  .nav{display:flex;border-top:1px solid var(--line);background:#fff;padding:10px 8px 16px;}
+  .nav button{flex:1;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted);}
+  .nav button i{display:block;font-size:17px;font-style:normal;margin-bottom:2px;opacity:.55;}
+  .nav button.on{color:var(--orange);}
+  .nav button.on i{opacity:1;}
+  /* toast */
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:var(--navy);color:#fff;font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:20px;
+    opacity:0;pointer-events:none;transition:all .25s;box-shadow:0 8px 24px rgba(35,45,75,.35);}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="demohint"><b>HoosLog</b> · interactive demo — tap around; sample data, nothing saves anywhere</div>
+
+<div class="phone">
+  <div class="statusbar"><span>9:41</span><span class="icons">▮▮▮ ⌁ ▉</span></div>
+  <div class="apphead">
+    <div class="wordmark">Hoos<span>Log</span></div>
+    <div class="avatar">WS</div>
+  </div>
+
+  <!-- ================= LOG VIEW ================= -->
+  <div class="view" id="view-log">
+    <div class="weekline">
+      <div class="wk">Week of Sep 14</div>
+      <div class="due">Hands in Sunday</div>
+    </div>
+    <div class="daystrip" id="daystrip"></div>
+
+    <div class="card plan">
+      <div class="planrow">
+        <span class="cardlabel" style="margin:0" id="planlabel">Coach's plan</span>
+        <span style="display:flex;gap:5px"><span class="chip am">AM</span><span class="chip" id="plantype">EASY</span></span>
+      </div>
+      <div class="plantitle" id="plantitle"></div>
+      <div class="planmeta" id="planmeta"></div>
+    </div>
+
+    <div class="card">
+      <div class="cardlabel">What you ran</div>
+      <div class="inrow">
+        <div class="field">
+          <label>Distance</label>
+          <div class="inputwrap"><input id="in-dist" inputmode="decimal" placeholder="0.0"><span class="unit">mi</span></div>
+        </div>
+        <div class="field">
+          <label>Time</label>
+          <div class="inputwrap"><input id="in-time" inputmode="numeric" placeholder="mm:ss"><span class="unit">min</span></div>
+        </div>
+      </div>
+      <div class="autopace" id="autopace">Avg pace — enter distance + time</div>
+    </div>
+
+    <div class="card">
+      <div class="cardlabel">How it felt — effort 1–10</div>
+      <div class="rpe" id="rpe"></div>
+      <div class="rpecap" id="rpecap"></div>
+    </div>
+
+    <div class="card">
+      <button class="togglerow" id="painrow" style="width:100%">
+        <span class="t">Anything hurting?</span>
+        <span class="switch" id="painswitch"></span>
+      </button>
+      <div class="hideable" id="painbox">
+        <textarea class="textin" id="in-pain" rows="2" placeholder="e.g. left achilles tight on strides"></textarea>
+      </div>
+      <span class="seenote" id="painnote">⚡ Coach sees this today — not Sunday</span>
+    </div>
+
+    <div class="card">
+      <div class="togglerow"><span class="t">Question for coach</span></div>
+      <input class="textin" id="in-q" placeholder="Anything you'd normally ask at practice…">
+    </div>
+
+    <div class="card">
+      <div class="togglerow"><span class="t">Notes</span></div>
+      <textarea class="textin" id="in-notes" rows="2" placeholder="Route, who you ran with, how it went…"></textarea>
+    </div>
+
+    <button class="save" id="savebtn">Save this run</button>
+    <div class="savecap" id="savecap"></div>
+  </div>
+
+  <!-- ================= HOME VIEW ================= -->
+  <div class="view on" id="view-home">
+    <div class="hello">
+      <div>
+        <h1>Morning, Will</h1>
+        <div class="sub">Week of Sep 14 – 20</div>
+      </div>
+      <div class="duechip">Hands in Sunday</div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile"><div class="n" id="t-mi">–</div><div class="l">logged this week</div></div>
+      <div class="tile hot"><div class="n" id="t-streak">12</div><div class="l">day logging streak</div></div>
+      <div class="tile"><div class="n" id="t-pct">94%</div><div class="l">sessions logged this season</div></div>
+    </div>
+
+    <div class="card">
+      <div class="cardlabel">This week at a glance</div>
+      <div id="weekrows"></div>
+      <button class="submit" id="submitbtn">Submit week to coach — unlocks Sunday</button>
+    </div>
+
+    <div class="card">
+      <div class="cardlabel">Mileage — plan vs actual</div>
+      <div class="mline">
+        <div class="big" id="m-big">–</div>
+        <div class="pct" id="m-pct"></div>
+      </div>
+      <div class="pbar"><div id="m-bar" style="width:0%"></div></div>
+      <div class="chart" id="chart"></div>
+      <div class="chartcap">Weekly miles, last 6 weeks — orange = current week in progress</div>
+    </div>
+
+    <div class="card">
+      <div class="cardlabel">From your coaches</div>
+      <div class="fitem">
+        <div class="favatar">CV</div>
+        <div class="fbody">
+          <div class="fmeta">Coach Vin · Wed workout · 2h ago</div>
+          <div class="ftext">"Good patience on the 1ks — that's exactly the rhythm I want going into Saturday."</div>
+        </div>
+      </div>
+      <div class="fitem">
+        <div class="favatar">CV</div>
+        <div class="fbody">
+          <div class="fmeta">Coach Vin · re: achilles flag · Tue 4:10 PM</div>
+          <div class="ftext">"Ice tonight and skip strides the rest of the week. Tell me how it feels before Saturday."</div>
+          <div class="fans">✓ Answered same day</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button data-nav="home" class="on"><i>⌂</i>Home</button>
+    <button data-nav="log"><i>✎</i>Log</button>
+    <button data-nav="week"><i>▦</i>Week</button>
+    <button data-nav="trends"><i>◔</i>Trends</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- in-memory demo state (nothing persists) ----------
+const PLANNED_TOTAL = 46;
+const HIST = [{l:'Aug 10',v:38},{l:'17',v:42},{l:'24',v:45},{l:'31',v:43},{l:'Sep 7',v:52}];
+const TODAY = 3; // Thursday
+const days = [
+  {dw:'MON',dn:14,plan:{type:'EASY',title:'Easy 8',meta:'Target 6:45–7:00 /mi · ~55 min'},
+   log:{mi:8.2,time:'55:41',rpe:5,pain:false,painText:'',q:'',notes:'Rivanna loop, felt good.'}},
+  {dw:'TUE',dn:15,plan:{type:'EASY',title:'Easy 8 + 4 × 20s strides',meta:'Target 6:45–7:00 /mi · strides on grass'},
+   log:{mi:8.2,time:'55:30',rpe:6,pain:true,painText:'Left achilles felt tight on the strides — fine on the run itself.',q:'',notes:'Strides on Lambeth field.'}},
+  {dw:'WED',dn:16,plan:{type:'WORKOUT',title:'6 × 1k @ CV, 90s jog',meta:'CV ≈ 3:12/k · full warm-up + cool-down'},
+   log:{mi:9.0,time:'58:45',rpe:8,pain:false,painText:'',q:'',notes:'Hit 3:10–3:13 on all six.'}},
+  {dw:'THU',dn:17,plan:{type:'EASY',title:'7 mi easy',meta:'Target 6:45–7:00 /mi · ~48 min · no strides this week (coach note)'},
+   log:null},
+  {dw:'FRI',dn:18,plan:{type:'EASY',title:'Easy 5 + strides',meta:'Strides only if achilles is 100%'},log:null},
+  {dw:'SAT',dn:19,plan:{type:'WORKOUT',title:'Tempo 4 mi',meta:'Goal 5:20–5:25 /mi · flats OK'},log:null},
+  {dw:'SUN',dn:20,plan:{type:'LONG',title:'Long 14',meta:'Conversational · fuel at 60 min'},log:null},
+];
+const RPE_WORDS = {1:'very easy',2:'very easy',3:'easy',4:'comfortable',5:'comfortable',6:'steady',7:'hard',8:'hard',9:'very hard',10:'max'};
+let sel = TODAY;
+let form = {rpe:null,pain:false};
+
+const $ = id => document.getElementById(id);
+
+// ---------- helpers ----------
+function parseTime(t){
+  const p = (t||'').trim().split(':').map(Number);
+  if(p.some(isNaN)||p.length<1||p.length>3) return null;
+  if(p.length===1) return p[0]*60;
+  if(p.length===2) return p[0]*60+p[1];
+  return p[0]*3600+p[1]*60+p[2];
+}
+function paceStr(mi,time){
+  const s = parseTime(time);
+  if(!s||!mi||mi<=0) return null;
+  const per = s/mi, m = Math.floor(per/60), ss = Math.round(per%60);
+  return m+':'+String(ss).padStart(2,'0');
+}
+function loggedMiles(){ return days.reduce((a,d)=>a+(d.log?d.log.mi:0),0); }
+function loggedCount(){ return days.filter(d=>d.log).length; }
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove('on'),1900);
+}
+
+// ---------- log view ----------
+function renderStrip(){
+  $('daystrip').innerHTML = days.map((d,i)=>
+    `<button class="day ${i===sel?'sel':''} ${i===TODAY?'istoday':''}" data-i="${i}">
+      <span class="dw">${d.dw}</span><span class="dn">${d.dn}</span>
+      <span class="st">${i===TODAY?'today':(d.log?'✓':'')}</span>
+    </button>`).join('');
+  $('daystrip').querySelectorAll('.day').forEach(b=>
+    b.addEventListener('click',()=>{ sel = +b.dataset.i; loadDay(); }));
+}
+function renderRpe(){
+  $('rpe').innerHTML = Array.from({length:10},(_,i)=>
+    `<button class="${form.rpe===i+1?'on':''}" data-r="${i+1}">${i+1}</button>`).join('');
+  $('rpe').querySelectorAll('button').forEach(b=>
+    b.addEventListener('click',()=>{ form.rpe = +b.dataset.r; renderRpe(); }));
+  $('rpecap').innerHTML = form.rpe ? `<b>${form.rpe} — ${RPE_WORDS[form.rpe]}.</b>` : 'Tap a number';
+}
+function updatePace(){
+  const p = paceStr(parseFloat($('in-dist').value), $('in-time').value);
+  $('autopace').innerHTML = p ? `Avg pace <b>${p} /mi</b> — calculated for you` : 'Avg pace — enter distance + time';
+}
+function setPain(on){
+  form.pain = on;
+  $('painswitch').classList.toggle('on',on);
+  $('painbox').classList.toggle('on',on);
+  $('painnote').classList.toggle('on',on);
+}
+function loadDay(){
+  const d = days[sel], L = d.log;
+  $('planlabel').textContent = `Coach's plan — ${d.dw[0]+d.dw.slice(1).toLowerCase()} Sep ${d.dn}`;
+  $('plantype').textContent = d.plan.type;
+  $('plantitle').textContent = d.plan.title;
+  $('planmeta').textContent = d.plan.meta;
+  $('in-dist').value = L?L.mi:''; $('in-time').value = L?L.time:'';
+  $('in-q').value = L?L.q:''; $('in-notes').value = L?L.notes:''; $('in-pain').value = L?L.painText:'';
+  form.rpe = L?L.rpe:null; setPain(L?L.pain:false);
+  renderStrip(); renderRpe(); updatePace();
+  $('savebtn').classList.remove('saved');
+  $('savebtn').textContent = L ? 'Update this run' : (sel===TODAY ? "Save today's run" : 'Save this run');
+  $('savecap').innerHTML = `<b>${loggedCount()} of 7</b> days logged this week`;
+}
+function saveDay(){
+  const mi = parseFloat($('in-dist').value);
+  if(!mi || mi<=0){ toast('Add a distance first'); return; }
+  days[sel].log = {
+    mi, time:$('in-time').value, rpe:form.rpe, pain:form.pain,
+    painText:$('in-pain').value, q:$('in-q').value, notes:$('in-notes').value
+  };
+  const b = $('savebtn'); b.classList.add('saved'); b.textContent = 'Saved ✓';
+  setTimeout(()=>{ b.classList.remove('saved'); b.textContent = 'Update this run'; },1400);
+  toast(form.pain ? 'Saved — pain flag sent to coach now' : 'Saved');
+  renderStrip(); renderHome();
+  $('savecap').innerHTML = `<b>${loggedCount()} of 7</b> days logged this week`;
+}
+
+// ---------- home view ----------
+function renderHome(){
+  const mi = loggedMiles();
+  $('t-mi').innerHTML = `${mi.toFixed(1).replace(/\.0$/,'')} <small>/ ${PLANNED_TOTAL} mi</small>`;
+  const pct = Math.min(100,Math.round(mi/PLANNED_TOTAL*100));
+  $('m-big').innerHTML = `${mi.toFixed(1).replace(/\.0$/,'')} <small>of ${PLANNED_TOTAL} mi planned</small>`;
+  $('m-pct').textContent = pct+'% · in progress';
+  $('m-bar').style.width = pct+'%';
+
+  $('weekrows').innerHTML = days.map((d,i)=>{
+    const L = d.log;
+    let right, subtitle;
+    if(L){ right = `<span class="done">✓</span>`;
+      subtitle = `${L.mi} mi${paceStr(L.mi,L.time)?' · '+paceStr(L.mi,L.time)+' avg':''}${L.pain?' · pain flagged':''}`; }
+    else if(i===TODAY){ right = `<span class="logbtn">Log</span>`; subtitle = 'not logged yet'; }
+    else { right = `<span class="upc">${i<TODAY?'missing':'upcoming'}</span>`; subtitle = ''; }
+    return `<button class="wrow ${i===TODAY&&!L?'today':''}" data-i="${i}">
+      <span class="d">${d.dw}</span>
+      <span class="s">${d.plan.title}${subtitle?`<small>${subtitle}</small>`:''}</span>${right}
+    </button>`;
+  }).join('');
+  $('weekrows').querySelectorAll('.wrow').forEach(b=>
+    b.addEventListener('click',()=>{ sel = +b.dataset.i; loadDay(); go('log'); }));
+
+  const max = Math.max(...HIST.map(h=>h.v), mi, 1);
+  const bars = [...HIST.map(h=>({...h,now:false})), {l:'this wk',v:mi,now:true}];
+  $('chart').innerHTML = bars.map((b,i)=>{
+    const h = Math.max(6, Math.round(b.v/max*72));
+    const lbl = (i===0||b.now||b.v===Math.max(...bars.map(x=>x.v))) ? `<b>${Math.round(b.v)}</b>` : '';
+    return `<div class="bar ${b.now?'now':''}">${lbl}<i style="height:${h}%"></i><span>${b.l}</span></div>`;
+  }).join('');
+}
+
+// ---------- nav ----------
+function go(view){
+  const isLog = view==='log';
+  $('view-log').classList.toggle('on',isLog);
+  $('view-home').classList.toggle('on',!isLog);
+  document.querySelectorAll('.nav button').forEach(b=>
+    b.classList.toggle('on', b.dataset.nav===(isLog?'log':'home')));
+  if(isLog) window.scrollTo({top:0});
+}
+document.querySelectorAll('.nav button').forEach(b=>
+  b.addEventListener('click',()=>{
+    const v = b.dataset.nav;
+    if(v==='home'||v==='log'){ go(v); }
+    else toast(v==='week' ? 'Week sheet view — coming in the real build' : 'Trends — coming in the real build');
+  }));
+
+// ---------- wire up ----------
+$('painrow').addEventListener('click',()=>setPain(!form.pain));
+$('in-dist').addEventListener('input',updatePace);
+$('in-time').addEventListener('input',updatePace);
+$('savebtn').addEventListener('click',saveDay);
+$('submitbtn').addEventListener('click',()=>toast('Week hands in Sunday — logging stays open until then'));
+
+loadDay();
+renderHome();
+</script>
+</body>
+</html>
