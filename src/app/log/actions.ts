@@ -123,3 +123,43 @@ export async function saveLog(input: SaveLogInput): Promise<SaveLogResult> {
   revalidatePath("/log");
   return { ok: true };
 }
+
+export type SaveSummaryResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Save the week's SUMMARY box (locked 19) — the athlete's Sunday reflection,
+ * editable any day of the week. Identity always comes from the session.
+ * Creates the athlete_weeks row if missing (same pattern as saveLog); the
+ * upsert only carries athlete_summary, so coach-owned columns (mileage_goal,
+ * coach_comment, reviewed_at) are never touched.
+ */
+export async function saveSummary(
+  weekStartISO: string,
+  text: string,
+): Promise<SaveSummaryResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You're signed out — sign in and try again." };
+
+  // ---- validate everything server-side ----
+  const parsed = fromISO(String(weekStartISO));
+  if (!parsed) return { ok: false, error: "That isn't a real week." };
+  const weekISO = isoDate(mondayOf(parsed)); // snap — the DB requires a Monday
+  if (weekISO > isoDate(mondayOf(todayET()))) {
+    return { ok: false, error: "That week hasn't started yet." };
+  }
+
+  const summary = typeof text === "string" ? text.trim() : "";
+  if (summary.length > MAX_TEXT) {
+    return { ok: false, error: `Summary is too long (max ${MAX_TEXT} characters).` };
+  }
+
+  const { error } = await supabase.from("athlete_weeks").upsert(
+    { athlete_id: user.id, week_start: weekISO, athlete_summary: summary || null },
+    { onConflict: "athlete_id,week_start" },
+  );
+  if (error) return { ok: false, error: "Couldn't save — try again." };
+
+  revalidatePath("/log");
+  return { ok: true };
+}

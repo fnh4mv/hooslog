@@ -12,6 +12,7 @@ import {
 } from "@/lib/dates";
 import { SignOutButton } from "../signout";
 import { DayForms } from "./day-forms";
+import { SummaryCard } from "./summary-card";
 
 const DOW_LETTERS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
@@ -32,6 +33,7 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
   const weekISO = isoDate(weekStart);
   const weekEnd = addDays(weekStart, 6);
   const isCurrentWeek = weekISO === isoDate(currentMonday);
+  const isFutureWeek = weekISO > isoDate(currentMonday);
 
   const dayParam = typeof sp.day === "string" ? fromISO(sp.day) : null;
   const selected =
@@ -74,6 +76,12 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
           Hoos<span className="text-orange">Log</span>
         </div>
         <div className="flex items-center gap-2 [&_button]:mt-0">
+          <Link
+            href="/log/history"
+            className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-bold text-navy"
+          >
+            History
+          </Link>
           {firstName && <span className="text-sm font-bold text-ink-2">{firstName}</span>}
           <SignOutButton />
         </div>
@@ -232,6 +240,17 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
           days logged
         </div>
       </section>
+
+      {/* ---- Sunday reflection + coach's weekly comment (locked 16, 19) ---- */}
+      {!isFutureWeek && (
+        <SummaryCard
+          key={`summary-${weekISO}`}
+          weekISO={weekISO}
+          initialSummary={athleteWeek?.athlete_summary ?? null}
+          coachComment={athleteWeek?.coach_comment ?? null}
+          reviewed={Boolean(athleteWeek?.reviewed_at)}
+        />
+      )}
     </main>
   );
 }
