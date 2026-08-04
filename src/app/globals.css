@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+/* HoosLog design tokens — UVA navy/orange, per docs/mockups (06/09). */
+@theme {
+  --color-navy: #232d4b;
+  --color-navy-soft: #edeff5;
+  --color-orange: #e57200;
+  --color-orange-soft: #fdf1e5;
+  --color-ink: #232d4b;
+  --color-ink-2: #5c6478;
+  --color-muted: #98a0b0;
+  --color-line: #e6e8ee;
+  --color-green: #2f7d4f;
+  --color-green-soft: #eaf4ee;
+  --color-page: #f7f8fa;
+}
+
+body {
+  background: var(--color-page);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}

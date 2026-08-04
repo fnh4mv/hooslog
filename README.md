@@ -6,13 +6,13 @@ The coach uploads his weekly plan (workout names + each athlete's weekly mileage
 
 ## Status
 
-**Pre-build.** Docs and mockups only — no application code yet, by design. The build starts after the coach co-design session locks the remaining decisions. Do not add app scaffolding before then.
+**Building — greenlit 2026-08-04.** App scaffold is live at the repo root (auth + schema + role-gated routing). Phase-0 trial: 3 athletes plus a trial coach account, starting Monday 2026-08-10. See CLAUDE.md `## App` for dev setup and the remaining build order.
 
 **Read [`CLAUDE.md`](./CLAUDE.md) first, every session.** It is the project's anti-staleness anchor: current status, the full numbered list of locked decisions, and open items. If this README and CLAUDE.md ever disagree, CLAUDE.md wins.
 
 ## Stack (locked — see docs/08)
 
-Next.js 15 (App Router, TypeScript) PWA on Vercel · Supabase (Postgres, Auth, RLS, Realtime) · Web Push + Resend · $0 pilot, ~$25/mo steady state. One repo, no separate backend, no ORM, RLS everywhere, soft deletes, ~10 tables. 24 athletes ≈ 6k log rows/season: every engineering hour goes to UI speed, none to scale.
+Next.js 16 (App Router, TypeScript) PWA on Vercel · Supabase (Postgres, Auth, RLS, Realtime) · Web Push + Resend · $0 pilot, ~$25/mo steady state. One repo, no separate backend, no ORM, RLS everywhere, soft deletes, ~10 tables. 24 athletes ≈ 6k log rows/season: every engineering hour goes to UI speed, none to scale.
 
 ## Repository layout
 
