@@ -76,6 +76,16 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
   const anyPlans = plans.some((p) => p.plan_text.trim());
   const reviewedCount = rows.filter((r) => r.reviewed).length;
 
+  // End-of-week reminder: on the weekend, how many athletes with logged data
+  // still need a review. In-app red dot, same as the athlete side.
+  const isWeekend = today.getDay() === 0 || today.getDay() === 6;
+  const toReview = rows.filter(
+    (r) => !r.reviewed && r.cells.some((c) => c.kind !== null),
+  ).length;
+  const reviewNudge = isCurrentWeek && isWeekend && toReview > 0
+    ? `End of the week — ${toReview} athlete${toReview > 1 ? "s" : ""} still to review.`
+    : null;
+
   return (
     <div className="min-h-screen">
       <CoachHeader
@@ -86,6 +96,15 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
       <AlertStrip alerts={alerts} weekISO={weekISO} todayISO={todayISO} />
 
       <main className="mx-auto max-w-[1280px] px-4 py-6">
+        {reviewNudge && (
+          <div className="mb-3 flex items-center gap-2.5 rounded-2xl border border-red/40 bg-red-soft px-4 py-3">
+            <span className="relative flex h-2.5 w-2.5 flex-none">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red opacity-60" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red" />
+            </span>
+            <span className="text-[13px] font-bold text-ink">{reviewNudge}</span>
+          </div>
+        )}
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h1 className="text-xl font-extrabold text-navy">
             Team — {rows.length} {rows.length === 1 ? "athlete" : "athletes"}

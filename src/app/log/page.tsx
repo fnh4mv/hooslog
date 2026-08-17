@@ -6,6 +6,7 @@ import {
   fmtDayShort,
   fmtMonthDay,
   fromISO,
+  hourET,
   isoDate,
   mondayOf,
   todayET,
@@ -68,6 +69,27 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
   const goal = athleteWeek?.mileage_goal ?? null;
   const pct = goal ? Math.min(100, Math.round((totalMiles / Number(goal)) * 100)) : 0;
 
+  // ---- end-of-day / end-of-week reminder (current week only) ----
+  // In-app red-dot nudge (locked decision: no push infra for the trial). Only
+  // nudges when something's actually owed, and holds the daily reminder until
+  // the afternoon so it isn't nagging at 7am.
+  const loggedToday = loggedDates.has(todayISO);
+  let unloggedSoFar = 0; // past-or-today days this week with nothing logged
+  for (let i = 0; i < 7; i++) {
+    const dISO = isoDate(addDays(weekStart, i));
+    if (dISO <= todayISO && !loggedDates.has(dISO)) unloggedSoFar++;
+  }
+  let nudge: string | null = null;
+  if (isCurrentWeek) {
+    if (today.getDay() === 0 && unloggedSoFar > 0) {
+      // Sunday — the week closes tonight.
+      nudge = `Last day of the week — ${unloggedSoFar} day${unloggedSoFar > 1 ? "s" : ""} still to log before it closes tonight.`;
+    } else if (!loggedToday && hourET() >= 15) {
+      nudge = "Don't forget to log today's run.";
+    }
+  }
+  const nudgeHref = `/log?week=${weekISO}&day=${todayISO}`;
+
   return (
     <main className="mx-auto flex max-w-md flex-col gap-3 px-4 py-6">
       {/* ---- header ---- */}
@@ -86,6 +108,20 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
           <SignOutButton />
         </div>
       </header>
+
+      {/* ---- reminder nudge (end of day / end of week) ---- */}
+      {nudge && (
+        <Link
+          href={nudgeHref}
+          className="flex items-center gap-2.5 rounded-2xl border border-red/40 bg-red-soft px-4 py-3"
+        >
+          <span className="relative flex h-2.5 w-2.5 flex-none">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red" />
+          </span>
+          <span className="text-[13px] font-bold leading-snug text-ink">{nudge}</span>
+        </Link>
+      )}
 
       {/* ---- week nav ---- */}
       <div className="mt-1 flex items-center justify-between">

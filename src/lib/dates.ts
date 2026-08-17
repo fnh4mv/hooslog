@@ -67,3 +67,14 @@ export function todayET(): Date {
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
   return new Date(get("year"), get("month") - 1, get("day"));
 }
+
+/** Current hour (0–23) in Eastern time. Used to hold the "log today" nudge
+ *  until the end of the day rather than nagging first thing in the morning. */
+export function hourET(): number {
+  const h = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(new Date()).find((p) => p.type === "hour")?.value;
+  return Number(h) % 24;
+}

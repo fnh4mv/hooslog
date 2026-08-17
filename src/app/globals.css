@@ -12,6 +12,8 @@
   --color-line: #e6e8ee;
   --color-green: #2f7d4f;
   --color-green-soft: #eaf4ee;
+  --color-red: #e5484d;        /* reminders / overdue — distinct from orange (pain) */
+  --color-red-soft: #fdecec;
   --color-page: #f7f8fa;
 }
 
