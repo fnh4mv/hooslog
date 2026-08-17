@@ -24,9 +24,12 @@ export default function SignupPage() {
       options: { data: { name: String(form.get("name")).trim() } },
     });
     if (error) {
-      // The DB trigger rejects non-UVA, non-staff emails.
+      // The DB trigger rejects non-UVA, non-staff emails — but GoTrue wraps
+      // trigger exceptions as "Database error saving new user", so match that
+      // too or the friendly message never reaches anyone.
       setError(
-        error.message.includes("UVA")
+        error.message.includes("UVA") ||
+          /database error saving new user/i.test(error.message)
           ? "Signups are restricted to UVA email addresses."
           : error.message,
       );

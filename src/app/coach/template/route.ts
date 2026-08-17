@@ -33,7 +33,9 @@ export async function GET() {
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition":
           'attachment; filename="hooslog_week_plan_template.xlsx"',
-        "Cache-Control": "public, max-age=3600",
+        // private: the response is behind a coach role check — a shared cache
+        // (CDN/proxy) must never replay it to someone the check never saw.
+        "Cache-Control": "private, max-age=3600",
       },
     });
   } catch {

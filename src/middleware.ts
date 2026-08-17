@@ -28,16 +28,20 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
 
-  if (!user && !isPublic) {
+  // Any redirect must carry the cookies getUser() may have just rotated onto
+  // `response` — a bare redirect would drop the fresh refresh token, and with
+  // token rotation the old one is already dead: the user gets signed out for
+  // opening a bookmarked /login at the wrong moment.
+  const redirectTo = (pathname: string) => {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-  if (user && isPublic) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
-  }
+    url.pathname = pathname;
+    const redirect = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
+  };
+
+  if (!user && !isPublic) return redirectTo("/login");
+  if (user && isPublic) return redirectTo("/");
   return response;
 }
 

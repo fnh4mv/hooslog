@@ -32,12 +32,21 @@ export function DayReviewControls({
 
   const dirty = checked !== initialChecked || comment !== (initialComment ?? "");
 
-  function save(nextChecked = checked) {
+  // revertTo: what `checked` should fall back to if the save fails — set when
+  // the ✓ toggle saved optimistically, so a failed write never leaves a green
+  // check the database doesn't have.
+  function save(nextChecked = checked, revertTo?: boolean) {
     setError(null);
     startTransition(async () => {
-      const res = await saveDayReview(athleteId, dateISO, nextChecked, comment);
+      let res: Awaited<ReturnType<typeof saveDayReview>>;
+      try {
+        res = await saveDayReview(athleteId, dateISO, nextChecked, comment);
+      } catch {
+        res = { ok: false, error: "Couldn't reach the server — check your connection and try again." };
+      }
       if (!res.ok) {
         setError(res.error);
+        if (revertTo !== undefined) setChecked(revertTo);
         return;
       }
       setSaved(true);
@@ -55,7 +64,7 @@ export function DayReviewControls({
         onClick={() => {
           const next = !checked;
           setChecked(next);
-          save(next); // the check alone is a complete review — save immediately
+          save(next, checked); // the check alone is a complete review — save now, revert on failure
         }}
         className={`flex h-9 w-9 flex-none items-center justify-center rounded-xl border-[1.5px] text-sm font-extrabold transition-colors disabled:opacity-60 ${
           checked
@@ -120,7 +129,12 @@ export function WeekReviewControls({
   function save(nextReviewed = reviewed) {
     setError(null);
     startTransition(async () => {
-      const res = await saveWeekReview(athleteId, weekISO, comment, nextReviewed);
+      let res: Awaited<ReturnType<typeof saveWeekReview>>;
+      try {
+        res = await saveWeekReview(athleteId, weekISO, comment, nextReviewed);
+      } catch {
+        res = { ok: false, error: "Couldn't reach the server — check your connection and try again." };
+      }
       if (!res.ok) {
         setError(res.error);
         return;

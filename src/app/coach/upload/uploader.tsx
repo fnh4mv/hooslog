@@ -51,7 +51,12 @@ export function Uploader() {
     const fd = new FormData();
     fd.set("file", next);
     startTransition(async () => {
-      const res = await previewUpload(fd);
+      let res: Awaited<ReturnType<typeof previewUpload>>;
+      try {
+        res = await previewUpload(fd);
+      } catch {
+        res = { ok: false, errors: [{ where: "Upload", message: "Couldn't send the file — check your connection and pick it again." }] };
+      }
       if (!res.ok) setErrors(res.errors);
       else setPreview(res.preview);
     });
@@ -63,7 +68,14 @@ export function Uploader() {
     fd.set("file", file);
     setErrors([]);
     startTransition(async () => {
-      const res = await commitUpload(fd);
+      let res: Awaited<ReturnType<typeof commitUpload>>;
+      try {
+        res = await commitUpload(fd);
+      } catch {
+        // Includes Chrome's ERR_UPLOAD_FILE_CHANGED — the coach re-saved the
+        // xlsx on disk between preview and confirm, so the held File is stale.
+        res = { ok: false, errors: [{ where: "Upload", message: "Couldn't re-send the file (did it change on disk?). Nothing was saved — pick the file again and re-post." }] };
+      }
       if (!res.ok) {
         setErrors(res.errors);
         return;
@@ -126,7 +138,13 @@ export function Uploader() {
           {file ? file.name : "Drop the filled-in template here"}
         </div>
         <p className="mt-1 text-[13px] text-muted">
-          {file ? "Checking it over…" : ".xlsx from the HoosLog template"}
+          {busy
+            ? "Checking it over…"
+            : file
+              ? errors.length > 0
+                ? "That one needs fixes — see below"
+                : "Parsed — review it below"
+              : ".xlsx from the HoosLog template"}
         </p>
 
         <input

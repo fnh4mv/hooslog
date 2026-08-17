@@ -33,7 +33,12 @@ export function SummaryCard({
   function onSave() {
     setError(null);
     startTransition(async () => {
-      const res = await saveSummary(weekISO, text);
+      let res: Awaited<ReturnType<typeof saveSummary>>;
+      try {
+        res = await saveSummary(weekISO, text);
+      } catch {
+        res = { ok: false, error: "Couldn't reach the server — check your signal and try again." };
+      }
       if (!res.ok) {
         setError(res.error);
         return;

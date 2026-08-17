@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveLog } from "./actions";
+import { deleteLog, saveLog } from "./actions";
 import type { Log, Slot } from "@/lib/types";
 
 const INPUT =
@@ -70,17 +70,23 @@ function LogForm({
     }
     setError(null);
     startTransition(async () => {
-      const res = await saveLog({
-        log_date: dateISO,
-        slot,
-        distance_mi: dist,
-        pace: pace.trim() || undefined,
-        rpe: rpe ?? undefined,
-        pain_flag: pain,
-        pain_note: painNote.trim() || undefined,
-        question: question.trim() || undefined,
-        notes: notes.trim() || undefined,
-      });
+      let res: Awaited<ReturnType<typeof saveLog>>;
+      try {
+        res = await saveLog({
+          log_date: dateISO,
+          slot,
+          distance_mi: dist,
+          pace: pace.trim() || undefined,
+          rpe: rpe ?? undefined,
+          pain_flag: pain,
+          pain_note: painNote.trim() || undefined,
+          question: question.trim() || undefined,
+          notes: notes.trim() || undefined,
+        });
+      } catch {
+        // Flaky phone data at practice is the normal case, not the edge case.
+        res = { ok: false, error: "Couldn't reach the server — check your signal and hit Save again." };
+      }
       if (!res.ok) {
         setError(res.error);
         return;
@@ -88,6 +94,34 @@ function LogForm({
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       router.refresh(); // make the strip's ✓ and the week summary catch up now
+    });
+  }
+
+  function onDelete() {
+    if (!existing) return;
+    if (!window.confirm("Remove this run? The day goes back to unlogged.")) return;
+    setError(null);
+    startTransition(async () => {
+      let res: Awaited<ReturnType<typeof deleteLog>>;
+      try {
+        res = await deleteLog(existing.id);
+      } catch {
+        res = { ok: false, error: "Couldn't reach the server — try again." };
+      }
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      // The form isn't remounted by the refresh (it's keyed by date), so clear
+      // it by hand — otherwise the deleted run's numbers linger in the fields.
+      setDistance("");
+      setPace("");
+      setRpe(null);
+      setPain(false);
+      setPainNote("");
+      setQuestion("");
+      setNotes("");
+      router.refresh();
     });
   }
 
@@ -229,6 +263,16 @@ function LogForm({
       <p className="mt-2 text-center text-[11px] font-semibold text-ink-2">
         Every save goes straight to your coach — no submit day.
       </p>
+      {existing && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={busy}
+          className="mt-1 w-full py-1.5 text-center text-[12px] font-semibold text-muted underline-offset-2 hover:text-orange hover:underline disabled:opacity-60"
+        >
+          Logged the wrong day? Remove this run
+        </button>
+      )}
     </section>
   );
 }

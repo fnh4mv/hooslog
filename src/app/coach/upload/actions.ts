@@ -66,10 +66,13 @@ export async function previewUpload(formData: FormData): Promise<PreviewResult> 
 
   // Match every email against a real athlete account. An unmatched email is
   // shown here and blocks the write — never dropped silently (docs/12 P4).
+  // Status filter matches import_week v2 AND the grid: a goal must never land
+  // on an account the coach can't see.
   const { data: roster } = await supabase
     .from("profiles")
     .select("name,email")
     .eq("role", "athlete")
+    .in("status", ["active", "injured"])
     .is("deleted_at", null);
 
   const byEmail = new Map(

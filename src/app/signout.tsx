@@ -8,7 +8,11 @@ export function SignOutButton() {
   return (
     <button
       onClick={async () => {
-        await createClient().auth.signOut();
+        // If the network drops mid-signout, still leave — middleware bounces
+        // any half-alive session back to /login on the next request anyway.
+        try {
+          await createClient().auth.signOut();
+        } catch {}
         router.push("/login");
         router.refresh();
       }}

@@ -222,7 +222,10 @@ export default async function AthleteDrillIn({
 
               {!isFuture && (
                 <DayReviewControls
-                  key={`${dISO}-${review?.updated_at ?? "new"}`}
+                  // Keyed by athlete+day ONLY — never by updated_at. The save
+                  // path calls router.refresh(); a key that changes with the
+                  // row would remount mid-typing and wipe the coach's text.
+                  key={`${athleteId}-${dISO}`}
                   athleteId={athleteId}
                   dateISO={dISO}
                   initialChecked={review?.checked ?? false}
@@ -246,7 +249,7 @@ export default async function AthleteDrillIn({
         )}
 
         <WeekReviewControls
-          key={`week-${weekISO}-${athleteWeek?.updated_at ?? "new"}`}
+          key={`week-${athleteId}-${weekISO}`}
           athleteId={athleteId}
           weekISO={weekISO}
           initialComment={athleteWeek?.coach_comment ?? null}

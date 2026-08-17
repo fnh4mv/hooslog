@@ -124,6 +124,32 @@ export async function saveLog(input: SaveLogInput): Promise<SaveLogResult> {
   return { ok: true };
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Remove a mis-logged run (wrong day is a near-certain week-one event for a
+ * backfilling team). Soft delete: sets deleted_at, so the partial unique index
+ * frees the (date, slot) for a re-log and nothing is ever truly lost.
+ * RLS's athlete_id check is the real boundary; the eq here is belt-and-braces.
+ */
+export async function deleteLog(logId: string): Promise<SaveLogResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You're signed out — sign in and try again." };
+  if (!UUID.test(String(logId))) return { ok: false, error: "That run doesn't exist." };
+
+  const { error } = await supabase
+    .from("logs")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", logId)
+    .eq("athlete_id", user.id)
+    .is("deleted_at", null);
+  if (error) return { ok: false, error: "Couldn't remove it — try again." };
+
+  revalidatePath("/log");
+  return { ok: true };
+}
+
 export type SaveSummaryResult = { ok: true } | { ok: false; error: string };
 
 /**
