@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, fromISO, isoDate, mondayOf } from "@/lib/dates";
+import { fullName, rosterKey } from "@/lib/names";
 import type { AthleteWeek, DayReview, Log, Profile, WeekPlan } from "@/lib/types";
 
 export type WeekData = {
@@ -149,4 +150,215 @@ export async function getHistory(
   }
 
   return [...byWeek.values()].sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
+}
+
+// ============================================================ coach portal
+
+/** One athlete × one day in the team grid. `miles` null = nothing logged. */
+export type GridCell = {
+  miles: number | null;
+  painFlag: boolean;
+  hasQuestion: boolean;
+};
+
+export type GridRow = {
+  athlete: Profile;
+  cells: GridCell[]; // exactly 7, Monday-first
+  totalMiles: number;
+  mileageGoal: number | null;
+  reviewed: boolean;
+};
+
+/** A pain flag or a question — the things the coach must not miss (locked 15). */
+export type Alert = {
+  athleteId: string;
+  athleteName: string;
+  dateISO: string;
+  kind: "pain" | "question";
+  detail: string;
+};
+
+export type CoachWeek = {
+  rows: GridRow[];
+  alerts: Alert[]; // newest first
+  plans: WeekPlan[];
+};
+
+/** Roster scope: who appears in the grid. Alums and inactives drop off. */
+const ACTIVE_STATUSES = ["active", "injured"];
+
+/**
+ * The whole team's week in one pass: roster × 7 days of logs, plus each
+ * athlete's goal and review state, plus every pain flag and question raised
+ * that week.
+ *
+ * One query per table across the entire roster and range — never a query per
+ * athlete, or the grid would fire 24× on every page load. Coach RLS
+ * (`is_coach()`) is what authorizes the cross-athlete reads; this function
+ * assumes the caller already passed through `src/app/coach/layout.tsx`.
+ */
+export async function getCoachWeek(
+  supabase: SupabaseClient,
+  weekStartISO: string,
+): Promise<CoachWeek> {
+  const weekStart = fromISO(weekStartISO);
+  if (!weekStart) throw new Error(`getCoachWeek: bad week start "${weekStartISO}"`);
+  const weekEndISO = isoDate(addDays(weekStart, 6));
+
+  const [rosterRes, weeksRes, logsRes, plansRes] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("*")
+      .eq("role", "athlete")
+      .in("status", ACTIVE_STATUSES)
+      .is("deleted_at", null),
+    supabase
+      .from("athlete_weeks")
+      .select("*")
+      .eq("week_start", weekStartISO)
+      .is("deleted_at", null),
+    supabase
+      .from("logs")
+      .select("*")
+      .gte("log_date", weekStartISO)
+      .lte("log_date", weekEndISO)
+      .is("deleted_at", null)
+      .order("log_date")
+      .order("slot"),
+    supabase
+      .from("week_plans")
+      .select("*")
+      .eq("week_start", weekStartISO)
+      .is("deleted_at", null)
+      .order("day"),
+  ]);
+
+  const roster = ((rosterRes.data as Profile[] | null) ?? []).sort((a, b) =>
+    rosterKey(a).localeCompare(rosterKey(b)),
+  );
+
+  const weekByAthlete = new Map<string, AthleteWeek>();
+  for (const w of (weeksRes.data as AthleteWeek[] | null) ?? []) {
+    weekByAthlete.set(w.athlete_id, w);
+  }
+
+  const emptyCells = (): GridCell[] =>
+    Array.from({ length: 7 }, () => ({ miles: null, painFlag: false, hasQuestion: false }));
+  const cellsByAthlete = new Map<string, GridCell[]>();
+  const nameById = new Map(roster.map((a) => [a.id, fullName(a)]));
+  const alerts: Alert[] = [];
+
+  for (const log of (logsRes.data as Log[] | null) ?? []) {
+    // A log from someone off the roster (alum, deactivated) is skipped rather
+    // than crashing the grid — the row it belongs to no longer exists.
+    if (!nameById.has(log.athlete_id)) continue;
+
+    const day = fromISO(log.log_date);
+    if (!day) continue;
+    const idx = Math.round((day.getTime() - weekStart.getTime()) / 86_400_000);
+    if (idx < 0 || idx > 6) continue;
+
+    let cells = cellsByAthlete.get(log.athlete_id);
+    if (!cells) {
+      cells = emptyCells();
+      cellsByAthlete.set(log.athlete_id, cells);
+    }
+    const cell = cells[idx];
+    // AM + PM sum into one cell; either slot can carry the flag or question.
+    cell.miles = (cell.miles ?? 0) + Number(log.distance_mi);
+    cell.painFlag ||= log.pain_flag;
+    const question = log.question?.trim();
+    cell.hasQuestion ||= Boolean(question);
+
+    const athleteName = nameById.get(log.athlete_id) as string;
+    if (log.pain_flag) {
+      alerts.push({
+        athleteId: log.athlete_id,
+        athleteName,
+        dateISO: log.log_date,
+        kind: "pain",
+        detail: log.pain_note?.trim() || "no detail given",
+      });
+    }
+    if (question) {
+      alerts.push({
+        athleteId: log.athlete_id,
+        athleteName,
+        dateISO: log.log_date,
+        kind: "question",
+        detail: question,
+      });
+    }
+  }
+
+  const rows: GridRow[] = roster.map((athlete) => {
+    const cells = cellsByAthlete.get(athlete.id) ?? emptyCells();
+    let total = 0;
+    for (const c of cells) {
+      if (c.miles !== null) {
+        c.miles = Math.round(c.miles * 10) / 10;
+        total += c.miles;
+      }
+    }
+    const week = weekByAthlete.get(athlete.id);
+    return {
+      athlete,
+      cells,
+      totalMiles: Math.round(total * 10) / 10,
+      mileageGoal: week?.mileage_goal == null ? null : Number(week.mileage_goal),
+      reviewed: Boolean(week?.reviewed_at),
+    };
+  });
+
+  // Pain before questions, then newest day first: the order the coach should
+  // work them in.
+  alerts.sort((a, b) => {
+    if (a.dateISO !== b.dateISO) return a.dateISO < b.dateISO ? 1 : -1;
+    if (a.kind !== b.kind) return a.kind === "pain" ? -1 : 1;
+    return a.athleteName.localeCompare(b.athleteName);
+  });
+
+  return { rows, alerts, plans: (plansRes.data as WeekPlan[] | null) ?? [] };
+}
+
+type RosterEntry = { id: string; name: string; email: string };
+
+export type CoachAthleteWeek = WeekData & {
+  /** Roster neighbours, so Sunday grading is one continuous flow. */
+  prevAthleteId: string | null;
+  nextAthleteId: string | null;
+  position: { index: number; total: number };
+};
+
+/**
+ * One athlete's full week for the drill-in, plus prev/next roster neighbours.
+ * Reuses `getWeekData` — the coach reads the exact rows the athlete sees, so
+ * there is only ever one shape of "a week" in the app.
+ */
+export async function getCoachAthleteWeek(
+  supabase: SupabaseClient,
+  athleteId: string,
+  weekStartISO: string,
+): Promise<CoachAthleteWeek> {
+  const [weekData, rosterRes] = await Promise.all([
+    getWeekData(supabase, athleteId, weekStartISO),
+    supabase
+      .from("profiles")
+      .select("id,name,email")
+      .eq("role", "athlete")
+      .in("status", ACTIVE_STATUSES)
+      .is("deleted_at", null),
+  ]);
+
+  const roster = ((rosterRes.data as RosterEntry[] | null) ?? []).sort((a, b) =>
+    rosterKey(a).localeCompare(rosterKey(b)),
+  );
+  const i = roster.findIndex((p) => p.id === athleteId);
+
+  return {
+    ...weekData,
+    prevAthleteId: i > 0 ? roster[i - 1].id : null,
+    nextAthleteId: i >= 0 && i < roster.length - 1 ? roster[i + 1].id : null,
+    position: { index: i, total: roster.length },
+  };
 }
