@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCoachWeek, type GridCell } from "@/lib/queries";
 import { addDays, fromISO, isoDate, mondayOf, todayET } from "@/lib/dates";
 import { shortName } from "@/lib/names";
+import { RUN_TYPE_MARKS } from "@/lib/types";
 import { AlertStrip } from "./alert-strip";
 import { CoachHeader } from "./header";
 
@@ -10,26 +11,44 @@ const DOW = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 /** Grid cell (docs/mockups/09a): miles, or the reason there aren't any. */
 function Cell({ cell, state }: { cell: GridCell; state: "past" | "today" | "future" }) {
+  const painClass = cell.painFlag
+    ? "text-orange underline decoration-orange decoration-2 underline-offset-4"
+    : "";
+  const question = cell.hasQuestion && (
+    <sup className="ml-0.5 font-extrabold text-orange" title="Question for you">
+      ?
+    </sup>
+  );
+
+  // Off / cross-train: reported, but no mileage.
+  if (cell.kind === "off" || cell.kind === "cross") {
+    return (
+      <span className={`text-[12px] font-bold ${painClass || "text-muted"}`}>
+        {cell.kind === "off" ? "off" : "XT"}
+        {question}
+      </span>
+    );
+  }
+
+  // Nothing logged: "—" = day passed empty, "am" = today still early, blank = future.
   if (cell.miles === null) {
-    // "—" = the day passed with nothing logged. "am" = today, still early.
-    // Future days stay blank: nothing is owed yet.
     const mark = state === "past" ? "—" : state === "today" ? "am" : "";
     return <span className="text-[13px] font-semibold text-muted">{mark}</span>;
   }
+
+  const runMark = cell.runType ? RUN_TYPE_MARKS[cell.runType] : "";
   return (
-    <span
-      className={`text-[13px] font-bold ${
-        cell.painFlag
-          ? "text-orange underline decoration-orange decoration-2 underline-offset-4"
-          : "text-ink"
-      }`}
-    >
+    <span className={`text-[13px] font-bold ${painClass || "text-ink"}`}>
       {cell.miles}
-      {cell.hasQuestion && (
-        <sup className="ml-0.5 font-extrabold text-orange" title="Question for you">
-          ?
+      {runMark && (
+        <sup
+          className="ml-0.5 font-extrabold text-navy"
+          title={cell.runType === "workout" ? "Workout" : "Long run"}
+        >
+          {runMark}
         </sup>
       )}
+      {question}
     </span>
   );
 }
@@ -210,6 +229,15 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
             <b className="text-ink">8.2</b> = miles logged
           </span>
           <span>
+            <b className="text-ink">8.2</b>
+            <sup className="font-extrabold text-navy">W</sup>/
+            <sup className="font-extrabold text-navy">L</sup> = workout / long run
+          </span>
+          <span>
+            <b className="text-ink">off</b> · <b className="text-ink">XT</b> = off day /
+            cross-train
+          </span>
+          <span>
             <b className="text-orange underline decoration-2 underline-offset-4">orange</b> = pain
             flag
           </span>
@@ -222,7 +250,6 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
           <span>
             <b className="text-ink">am</b> = today, not in yet
           </span>
-          <span>blank = upcoming</span>
         </div>
       </main>
     </div>

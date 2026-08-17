@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, fromISO, isoDate, mondayOf } from "@/lib/dates";
 import { fullName, rosterKey } from "@/lib/names";
-import type { AthleteWeek, DayReview, Log, Profile, WeekPlan } from "@/lib/types";
+import type { AthleteWeek, DayReview, Log, LogKind, Profile, RunType, WeekPlan } from "@/lib/types";
 
 export type WeekData = {
   profile: Profile;
@@ -154,12 +154,28 @@ export async function getHistory(
 
 // ============================================================ coach portal
 
-/** One athlete × one day in the team grid. `miles` null = nothing logged. */
+/**
+ * One athlete × one day in the team grid.
+ * - kind null + miles null = nothing logged.
+ * - kind "run" = miles is the AM+PM sum; runType is the day's hardest run.
+ * - kind "off" / "cross" = the day was reported as rest / cross-train (0 miles).
+ */
 export type GridCell = {
   miles: number | null;
+  kind: LogKind | null;
+  runType: RunType | null;
   painFlag: boolean;
   hasQuestion: boolean;
 };
+
+// Which run type wins when a day has more than one run: the hardest one is
+// what a coach scanning the grid most wants to see.
+const RUN_TYPE_RANK: Record<RunType, number> = { workout: 3, long: 2, aerobic: 1 };
+function hardestRunType(a: RunType | null, b: RunType | null): RunType | null {
+  if (!a) return b;
+  if (!b) return a;
+  return RUN_TYPE_RANK[a] >= RUN_TYPE_RANK[b] ? a : b;
+}
 
 export type GridRow = {
   athlete: Profile;
@@ -243,7 +259,13 @@ export async function getCoachWeek(
   }
 
   const emptyCells = (): GridCell[] =>
-    Array.from({ length: 7 }, () => ({ miles: null, painFlag: false, hasQuestion: false }));
+    Array.from({ length: 7 }, () => ({
+      miles: null,
+      kind: null,
+      runType: null,
+      painFlag: false,
+      hasQuestion: false,
+    }));
   const cellsByAthlete = new Map<string, GridCell[]>();
   const nameById = new Map(roster.map((a) => [a.id, fullName(a)]));
   const alerts: Alert[] = [];
@@ -264,8 +286,15 @@ export async function getCoachWeek(
       cellsByAthlete.set(log.athlete_id, cells);
     }
     const cell = cells[idx];
-    // AM + PM sum into one cell; either slot can carry the flag or question.
-    cell.miles = (cell.miles ?? 0) + Number(log.distance_mi);
+    // Off/cross is a single entry for the day; a run sums AM+PM. Either kind of
+    // entry can carry the flag or question.
+    if (log.kind === "off" || log.kind === "cross") {
+      cell.kind = log.kind;
+    } else {
+      cell.kind = "run";
+      cell.miles = (cell.miles ?? 0) + Number(log.distance_mi);
+      cell.runType = hardestRunType(cell.runType, log.run_type);
+    }
     cell.painFlag ||= log.pain_flag;
     const question = log.question?.trim();
     cell.hasQuestion ||= Boolean(question);

@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { fromISO, isoDate, mondayOf, todayET } from "@/lib/dates";
-import type { Slot } from "@/lib/types";
+import type { LogKind, RunType, Slot } from "@/lib/types";
 
 export type SaveLogInput = {
   log_date: string; // "YYYY-MM-DD"
   slot: Slot;
-  distance_mi: number;
+  kind?: LogKind; // defaults to "run"
+  run_type?: RunType | null; // runs only
+  distance_mi: number; // ignored (forced to 0) for off/cross
   pace?: string;
   rpe?: number;
   pain_flag: boolean;
@@ -48,22 +50,43 @@ export async function saveLog(input: SaveLogInput): Promise<SaveLogResult> {
     return { ok: false, error: "Slot must be AM or PM." };
   }
 
-  const distance = Number(input.distance_mi);
-  if (!Number.isFinite(distance) || distance < 0 || distance > 40) {
-    return { ok: false, error: "Distance must be a number between 0 and 40 miles." };
+  const kind: LogKind = input.kind ?? "run";
+  if (kind !== "run" && kind !== "off" && kind !== "cross") {
+    return { ok: false, error: "That isn't a valid kind of day." };
   }
+  const isRun = kind === "run";
+  // An off/cross day is one entry for the whole day — always the AM slot. The
+  // "you ran AM and PM" concept only applies to runs.
+  const slot: Slot = isRun ? input.slot : "AM";
 
-  const pace = cleanText(input.pace);
-  if (pace && pace.length > 10) {
-    return { ok: false, error: "Pace should be short — like 6:45." };
-  }
-
+  // Off/cross carry no mileage, pace, RPE, or run type — they still carry the
+  // pain flag, question, and notes below.
+  let distance = 0;
+  let runType: RunType | null = null;
+  let pace: string | null = null;
   let rpe: number | null = null;
-  if (input.rpe !== undefined && input.rpe !== null) {
-    if (!Number.isInteger(input.rpe) || input.rpe < 1 || input.rpe > 10) {
-      return { ok: false, error: "Effort must be a whole number from 1 to 10." };
+
+  if (isRun) {
+    distance = Number(input.distance_mi);
+    if (!Number.isFinite(distance) || distance < 0 || distance > 40) {
+      return { ok: false, error: "Distance must be a number between 0 and 40 miles." };
     }
-    rpe = input.rpe;
+    if (input.run_type != null) {
+      if (!["workout", "long", "aerobic"].includes(input.run_type)) {
+        return { ok: false, error: "That isn't a valid run type." };
+      }
+      runType = input.run_type;
+    }
+    pace = cleanText(input.pace);
+    if (pace && pace.length > 10) {
+      return { ok: false, error: "Pace should be short — like 6:45." };
+    }
+    if (input.rpe !== undefined && input.rpe !== null) {
+      if (!Number.isInteger(input.rpe) || input.rpe < 1 || input.rpe > 10) {
+        return { ok: false, error: "Effort must be a whole number from 1 to 10." };
+      }
+      rpe = input.rpe;
+    }
   }
 
   const painFlag = input.pain_flag === true;
@@ -83,7 +106,9 @@ export async function saveLog(input: SaveLogInput): Promise<SaveLogResult> {
   const row = {
     athlete_id: user.id,
     log_date: logDate,
-    slot: input.slot,
+    slot,
+    kind,
+    run_type: runType,
     distance_mi: Math.round(distance * 10) / 10, // column is numeric(4,1)
     pace,
     rpe,
@@ -102,7 +127,7 @@ export async function saveLog(input: SaveLogInput): Promise<SaveLogResult> {
     .select("id")
     .eq("athlete_id", user.id)
     .eq("log_date", logDate)
-    .eq("slot", input.slot)
+    .eq("slot", slot)
     .is("deleted_at", null)
     .maybeSingle();
   if (findError) return { ok: false, error: "Couldn't save — try again." };
@@ -111,6 +136,18 @@ export async function saveLog(input: SaveLogInput): Promise<SaveLogResult> {
     ? await supabase.from("logs").update(row).eq("id", existing.id)
     : await supabase.from("logs").insert(row);
   if (write.error) return { ok: false, error: "Couldn't save — try again." };
+
+  // Marking the day off/cross removes any run in the other slot — a day can't
+  // be both "off" and a PM run. (Runs never touch the other slot.)
+  if (!isRun) {
+    await supabase
+      .from("logs")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("athlete_id", user.id)
+      .eq("log_date", logDate)
+      .neq("slot", slot)
+      .is("deleted_at", null);
+  }
 
   // Make sure this week's sheet row exists. mileage_goal stays null — the
   // coach sets it. Not critical path: the run is already saved, so a failure

@@ -8,6 +8,27 @@ export type Role = "athlete" | "coach";
 export type AthleteStatus = "active" | "injured" | "inactive" | "alum";
 export type Slot = "AM" | "PM";
 
+/** What a day was: a run, a planned off day, or a cross-train day (migration 0004). */
+export type LogKind = "run" | "off" | "cross";
+/** Run classification, runs only. Aerobic = the everyday baseline. */
+export type RunType = "workout" | "long" | "aerobic";
+
+export const RUN_TYPE_LABELS: Record<RunType, string> = {
+  workout: "Workout",
+  long: "Long run",
+  aerobic: "Aerobic",
+};
+/** Short mark for the dense coach grid; aerobic stays unmarked (it's the baseline). */
+export const RUN_TYPE_MARKS: Record<RunType, string> = {
+  workout: "W",
+  long: "L",
+  aerobic: "",
+};
+export const KIND_LABELS: Record<Exclude<LogKind, "run">, string> = {
+  off: "Off day",
+  cross: "Cross-train",
+};
+
 export type Profile = {
   id: string;
   name: string;
@@ -47,7 +68,9 @@ export type Log = {
   athlete_id: string;
   log_date: string; // DATE
   slot: Slot;
-  distance_mi: number;
+  kind: LogKind; // 'run' | 'off' | 'cross' (migration 0004)
+  run_type: RunType | null; // runs only; null = unspecified
+  distance_mi: number; // 0 for off/cross
   pace: string | null; // as typed, e.g. "6:47"
   rpe: number | null; // 1–10
   pain_flag: boolean;

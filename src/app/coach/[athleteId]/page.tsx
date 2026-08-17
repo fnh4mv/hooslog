@@ -4,14 +4,28 @@ import { createClient } from "@/lib/supabase/server";
 import { getCoachAthleteWeek } from "@/lib/queries";
 import { addDays, fmtDayShort, fromISO, isoDate, mondayOf, todayET } from "@/lib/dates";
 import { fullName } from "@/lib/names";
-import type { Log } from "@/lib/types";
+import { KIND_LABELS, RUN_TYPE_LABELS, type Log } from "@/lib/types";
 import { CoachHeader } from "../header";
 import { DayReviewControls, WeekReviewControls } from "../review-controls";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** One logged run inside a day card. */
+/** One entry inside a day card — a run, or an off/cross-train day. */
 function LogLine({ log }: { log: Log }) {
+  // Off / cross-train: no mileage line, just what the day was (+ any notes).
+  if (log.kind === "off" || log.kind === "cross") {
+    return (
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="rounded bg-navy-soft px-2 py-0.5 text-[11px] font-extrabold text-navy">
+          {KIND_LABELS[log.kind]}
+        </span>
+        {log.notes && (
+          <span className="text-[13px] font-semibold text-ink-2">{log.notes}</span>
+        )}
+      </div>
+    );
+  }
+
   const bits = [
     log.pace ? `${log.pace} pace` : null,
     log.rpe !== null ? `RPE ${log.rpe}` : null,
@@ -26,6 +40,11 @@ function LogLine({ log }: { log: Log }) {
         {Number(log.distance_mi)}
         <span className="ml-0.5 text-[11px] font-bold text-muted">mi</span>
       </span>
+      {log.run_type && (
+        <span className="rounded-full bg-navy px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
+          {RUN_TYPE_LABELS[log.run_type]}
+        </span>
+      )}
       {bits.length > 0 && (
         <span className="text-[13px] font-semibold text-ink-2">{bits.join(" · ")}</span>
       )}

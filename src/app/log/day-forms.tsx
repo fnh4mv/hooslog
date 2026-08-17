@@ -3,15 +3,20 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteLog, saveLog } from "./actions";
-import type { Log, Slot } from "@/lib/types";
+import { RUN_TYPE_LABELS, type Log, type LogKind, type RunType, type Slot } from "@/lib/types";
 
 const INPUT =
   "w-full rounded-xl border-[1.5px] border-line bg-white px-3.5 py-3 text-[15px] font-semibold text-ink outline-none placeholder:font-normal placeholder:text-muted focus:border-orange";
 
+const RUN_TYPES: RunType[] = ["workout", "long", "aerobic"];
+
 /**
- * The day's log form(s): AM always, PM revealed by "+ Add PM run" (doubles =
- * two rows, locked 19). Server pre-fills via props; page.tsx keys this by
- * date so switching days resets state.
+ * The day's entry. A day is one of three things (Ran / Off / Cross-train); the
+ * mode picker at the top switches between them. "Ran" shows the run form(s) —
+ * AM always, PM revealed by "+ Add PM run" (doubles). Off and cross-train are
+ * a light card that still carries a pain flag and a question.
+ *
+ * page.tsx keys this by date, so switching days resets everything.
  */
 export function DayForms({
   dateISO,
@@ -22,23 +27,79 @@ export function DayForms({
   amLog: Log | null;
   pmLog: Log | null;
 }) {
+  // The AM slot holds either the morning run OR the off/cross entry.
+  const dayKind: LogKind = amLog && amLog.kind !== "run" ? amLog.kind : "run";
+  const [mode, setMode] = useState<LogKind>(dayKind);
   const [showPM, setShowPM] = useState(false);
+
+  const nonRun = amLog && amLog.kind !== "run" ? amLog : null;
+
   return (
     <div className="flex flex-col gap-3">
-      <LogForm dateISO={dateISO} slot="AM" existing={amLog} />
-      {pmLog || showPM ? (
-        <LogForm dateISO={dateISO} slot="PM" existing={pmLog} />
+      <ModePicker mode={mode} onChange={setMode} />
+
+      {mode === "run" ? (
+        <>
+          <LogForm dateISO={dateISO} slot="AM" existing={amLog?.kind === "run" ? amLog : null} />
+          {pmLog || showPM ? (
+            <LogForm dateISO={dateISO} slot="PM" existing={pmLog} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowPM(true)}
+              className="rounded-2xl border-[1.5px] border-dashed border-[#C9CDD8] bg-white py-3.5 text-sm font-bold text-ink-2"
+            >
+              + Add PM run
+            </button>
+          )}
+        </>
       ) : (
-        <button
-          type="button"
-          onClick={() => setShowPM(true)}
-          className="rounded-2xl border-[1.5px] border-dashed border-[#C9CDD8] bg-white py-3.5 text-sm font-bold text-ink-2"
-        >
-          + Add PM run
-        </button>
+        <OffDayForm dateISO={dateISO} kind={mode} existing={nonRun} />
       )}
     </div>
   );
+}
+
+/** Ran / Off / Cross-train — the three things a day can be. */
+function ModePicker({ mode, onChange }: { mode: LogKind; onChange: (m: LogKind) => void }) {
+  const opts: { value: LogKind; label: string }[] = [
+    { value: "run", label: "Ran" },
+    { value: "off", label: "Off day" },
+    { value: "cross", label: "Cross-train" },
+  ];
+  return (
+    <div className="flex gap-1.5 rounded-2xl border border-line bg-white p-1.5">
+      {opts.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={mode === o.value}
+          onClick={() => onChange(o.value)}
+          className={`flex-1 rounded-xl py-2.5 text-[13px] font-bold transition-colors ${
+            mode === o.value ? "bg-navy text-white shadow-sm" : "bg-white text-ink-2"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Shared: pain toggle + question + notes + save/delete, used by both forms. */
+function useDayEntry(existing: Log | null) {
+  const router = useRouter();
+  const [pain, setPain] = useState(existing?.pain_flag ?? false);
+  const [painNote, setPainNote] = useState(existing?.pain_note ?? "");
+  const [question, setQuestion] = useState(existing?.question ?? "");
+  const [notes, setNotes] = useState(existing?.notes ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, startTransition] = useTransition();
+  return {
+    router, pain, setPain, painNote, setPainNote, question, setQuestion,
+    notes, setNotes, error, setError, saved, setSaved, busy, startTransition,
+  };
 }
 
 function LogForm({
@@ -50,58 +111,53 @@ function LogForm({
   slot: Slot;
   existing: Log | null;
 }) {
-  const router = useRouter();
+  const s = useDayEntry(existing);
   const [distance, setDistance] = useState(existing ? String(existing.distance_mi) : "");
   const [pace, setPace] = useState(existing?.pace ?? "");
   const [rpe, setRpe] = useState<number | null>(existing?.rpe ?? null);
-  const [pain, setPain] = useState(existing?.pain_flag ?? false);
-  const [painNote, setPainNote] = useState(existing?.pain_note ?? "");
-  const [question, setQuestion] = useState(existing?.question ?? "");
-  const [notes, setNotes] = useState(existing?.notes ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [busy, startTransition] = useTransition();
+  const [runType, setRunType] = useState<RunType | null>(existing?.run_type ?? null);
 
   function onSave() {
     const dist = Number(distance);
     if (distance.trim() === "" || !Number.isFinite(dist)) {
-      setError("Enter your distance in miles.");
+      s.setError("Enter your distance in miles.");
       return;
     }
-    setError(null);
-    startTransition(async () => {
+    s.setError(null);
+    s.startTransition(async () => {
       let res: Awaited<ReturnType<typeof saveLog>>;
       try {
         res = await saveLog({
           log_date: dateISO,
           slot,
+          kind: "run",
+          run_type: runType,
           distance_mi: dist,
           pace: pace.trim() || undefined,
           rpe: rpe ?? undefined,
-          pain_flag: pain,
-          pain_note: painNote.trim() || undefined,
-          question: question.trim() || undefined,
-          notes: notes.trim() || undefined,
+          pain_flag: s.pain,
+          pain_note: s.painNote.trim() || undefined,
+          question: s.question.trim() || undefined,
+          notes: s.notes.trim() || undefined,
         });
       } catch {
-        // Flaky phone data at practice is the normal case, not the edge case.
         res = { ok: false, error: "Couldn't reach the server — check your signal and hit Save again." };
       }
       if (!res.ok) {
-        setError(res.error);
+        s.setError(res.error);
         return;
       }
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-      router.refresh(); // make the strip's ✓ and the week summary catch up now
+      s.setSaved(true);
+      setTimeout(() => s.setSaved(false), 2000);
+      s.router.refresh();
     });
   }
 
   function onDelete() {
     if (!existing) return;
     if (!window.confirm("Remove this run? The day goes back to unlogged.")) return;
-    setError(null);
-    startTransition(async () => {
+    s.setError(null);
+    s.startTransition(async () => {
       let res: Awaited<ReturnType<typeof deleteLog>>;
       try {
         res = await deleteLog(existing.id);
@@ -109,19 +165,18 @@ function LogForm({
         res = { ok: false, error: "Couldn't reach the server — try again." };
       }
       if (!res.ok) {
-        setError(res.error);
+        s.setError(res.error);
         return;
       }
-      // The form isn't remounted by the refresh (it's keyed by date), so clear
-      // it by hand — otherwise the deleted run's numbers linger in the fields.
       setDistance("");
       setPace("");
       setRpe(null);
-      setPain(false);
-      setPainNote("");
-      setQuestion("");
-      setNotes("");
-      router.refresh();
+      setRunType(null);
+      s.setPain(false);
+      s.setPainNote("");
+      s.setQuestion("");
+      s.setNotes("");
+      s.router.refresh();
     });
   }
 
@@ -173,6 +228,29 @@ function LogForm({
 
       <div className="mt-4">
         <span className="mb-1.5 block text-xs font-semibold text-ink-2">
+          Type of run <span className="font-normal text-muted">(optional)</span>
+        </span>
+        <div className="flex gap-1.5">
+          {RUN_TYPES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              aria-pressed={runType === t}
+              onClick={() => setRunType(runType === t ? null : t)}
+              className={`flex-1 rounded-lg border-[1.5px] py-2 text-[13px] font-bold ${
+                runType === t
+                  ? "border-navy bg-navy text-white"
+                  : "border-line bg-white text-ink-2"
+              }`}
+            >
+              {RUN_TYPE_LABELS[t]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <span className="mb-1.5 block text-xs font-semibold text-ink-2">
           How it felt — effort 1–10 <span className="font-normal text-muted">(optional)</span>
         </span>
         <div className="flex gap-1">
@@ -194,30 +272,151 @@ function LogForm({
         </div>
       </div>
 
+      <PainQuestionNotes s={s} />
+
+      {s.error && <p className="mt-3 text-sm font-semibold text-orange">{s.error}</p>}
+
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={s.busy}
+        className="mt-4 w-full rounded-xl bg-navy py-3.5 text-[15px] font-bold text-white shadow-md disabled:opacity-60"
+      >
+        {s.busy ? "Saving…" : s.saved ? "Saved ✓" : existing ? "Update run" : "Save run"}
+      </button>
+      <p className="mt-2 text-center text-[11px] font-semibold text-ink-2">
+        Every save goes straight to your coach — no submit day.
+      </p>
+      {existing && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={s.busy}
+          className="mt-1 w-full py-1.5 text-center text-[12px] font-semibold text-muted underline-offset-2 hover:text-orange hover:underline disabled:opacity-60"
+        >
+          Logged the wrong day? Remove this run
+        </button>
+      )}
+    </section>
+  );
+}
+
+/** The light off-day / cross-train card. No mileage — still reports pain. */
+function OffDayForm({
+  dateISO,
+  kind,
+  existing,
+}: {
+  dateISO: string;
+  kind: Exclude<LogKind, "run">;
+  existing: Log | null;
+}) {
+  const s = useDayEntry(existing);
+
+  function onSave() {
+    s.setError(null);
+    s.startTransition(async () => {
+      let res: Awaited<ReturnType<typeof saveLog>>;
+      try {
+        res = await saveLog({
+          log_date: dateISO,
+          slot: "AM",
+          kind,
+          distance_mi: 0,
+          pain_flag: s.pain,
+          pain_note: s.painNote.trim() || undefined,
+          question: s.question.trim() || undefined,
+          notes: s.notes.trim() || undefined,
+        });
+      } catch {
+        res = { ok: false, error: "Couldn't reach the server — check your signal and hit Save again." };
+      }
+      if (!res.ok) {
+        s.setError(res.error);
+        return;
+      }
+      s.setSaved(true);
+      setTimeout(() => s.setSaved(false), 2000);
+      s.router.refresh();
+    });
+  }
+
+  const isCross = kind === "cross";
+  return (
+    <section className="rounded-2xl border border-line bg-white p-4">
+      <div className="text-[15px] font-bold text-ink">
+        {isCross ? "Cross-trained today" : "Off day"}
+      </div>
+      <p className="mt-0.5 text-[13px] text-muted">
+        {isCross
+          ? "Bike, pool, lift — whatever you did instead of running. No mileage counted."
+          : "Planned rest. Your coach sees the day was accounted for, not forgotten."}
+      </p>
+
+      {isCross && (
+        <label className="mt-3 block">
+          <span className="mb-1 block text-xs font-semibold text-ink-2">
+            What you did <span className="font-normal text-muted">(optional)</span>
+          </span>
+          <input
+            value={s.notes}
+            onChange={(e) => s.setNotes(e.target.value)}
+            placeholder="45 min bike, easy spin"
+            className={INPUT}
+          />
+        </label>
+      )}
+
+      <PainQuestionNotes s={s} hideNotes={isCross} />
+
+      {s.error && <p className="mt-3 text-sm font-semibold text-orange">{s.error}</p>}
+
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={s.busy}
+        className="mt-4 w-full rounded-xl bg-navy py-3.5 text-[15px] font-bold text-white shadow-md disabled:opacity-60"
+      >
+        {s.busy ? "Saving…" : s.saved ? "Saved ✓" : existing ? "Update" : isCross ? "Log cross-train" : "Log off day"}
+      </button>
+    </section>
+  );
+}
+
+/** Pain toggle + question + notes — shared across run and off/cross forms. */
+function PainQuestionNotes({
+  s,
+  hideNotes = false,
+}: {
+  s: ReturnType<typeof useDayEntry>;
+  hideNotes?: boolean;
+}) {
+  return (
+    <>
       <div className="mt-4">
         <div className="flex items-center justify-between">
           <span className="text-sm font-bold text-ink">Anything hurting?</span>
           <button
             type="button"
             role="switch"
-            aria-checked={pain}
-            onClick={() => setPain(!pain)}
+            aria-checked={s.pain}
+            onClick={() => s.setPain(!s.pain)}
             className={`relative h-6 w-11 rounded-full transition-colors ${
-              pain ? "bg-orange" : "bg-[#D6DAE2]"
+              s.pain ? "bg-orange" : "bg-[#D6DAE2]"
             }`}
           >
             <span
               className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                pain ? "translate-x-5" : ""
+                s.pain ? "translate-x-5" : ""
               }`}
             />
           </button>
         </div>
-        {pain && (
+        {s.pain && (
           <>
             <textarea
-              value={painNote}
-              onChange={(e) => setPainNote(e.target.value)}
+              value={s.painNote}
+              onChange={(e) => s.setPainNote(e.target.value)}
               rows={2}
               placeholder="Where and how much? e.g. left achilles, dull after mile 5"
               className={`${INPUT} mt-2 resize-none leading-relaxed`}
@@ -232,47 +431,25 @@ function LogForm({
       <label className="mt-4 block">
         <span className="mb-1 block text-xs font-semibold text-ink-2">Question for coach</span>
         <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
+          value={s.question}
+          onChange={(e) => s.setQuestion(e.target.value)}
           placeholder="Flats or spikes for Saturday?"
           className={INPUT}
         />
       </label>
 
-      <label className="mt-4 block">
-        <span className="mb-1 block text-xs font-semibold text-ink-2">Notes</span>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          placeholder="Route, who you ran with, how it felt…"
-          className={`${INPUT} resize-none leading-relaxed`}
-        />
-      </label>
-
-      {error && <p className="mt-3 text-sm font-semibold text-orange">{error}</p>}
-
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={busy}
-        className="mt-4 w-full rounded-xl bg-navy py-3.5 text-[15px] font-bold text-white shadow-md disabled:opacity-60"
-      >
-        {busy ? "Saving…" : saved ? "Saved ✓" : existing ? "Update run" : "Save run"}
-      </button>
-      <p className="mt-2 text-center text-[11px] font-semibold text-ink-2">
-        Every save goes straight to your coach — no submit day.
-      </p>
-      {existing && (
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={busy}
-          className="mt-1 w-full py-1.5 text-center text-[12px] font-semibold text-muted underline-offset-2 hover:text-orange hover:underline disabled:opacity-60"
-        >
-          Logged the wrong day? Remove this run
-        </button>
+      {!hideNotes && (
+        <label className="mt-4 block">
+          <span className="mb-1 block text-xs font-semibold text-ink-2">Notes</span>
+          <textarea
+            value={s.notes}
+            onChange={(e) => s.setNotes(e.target.value)}
+            rows={3}
+            placeholder="Route, who you ran with, how it felt…"
+            className={`${INPUT} resize-none leading-relaxed`}
+          />
+        </label>
       )}
-    </section>
+    </>
   );
 }
