@@ -12,14 +12,23 @@ that exist are `fnh4mv+coach@virginia.edu` (coach) and `zwh3ga@virginia.edu`
 
 ---
 
-## ⛔ Waiting on William (he is aggregating these)
+## ✅ DONE 2026-08-16/17 (Tasks 1, 2, 3 shipped + verified live)
 
-- [ ] **The 2 real coach emails.**
-- [ ] **The full list of everyone allowed to sign up** (all athletes + the 2
-      coaches). This becomes a **closed roster** — nobody off the list can make
-      an account. Make sure `zwh3ga@virginia.edu` is on it (already signed up).
+- **Task 1 & 2 — closed roster:** `supabase/migrations/0005_closed_roster.sql`
+  applied. Coaches = Dunbar (`hfb5af`), Bradley (`ndt4ve`), + `fnh4mv+coach`
+  test. 30 athletes in `athlete_emails`. Off-roster signups rejected (verified).
+- **Task 3 — "Aerobic" → "Training run":** shipped (label only; stored value
+  still `aerobic`). Verified on prod.
+- **Bonus — in-app reminders shipped:** red-dot nudges (athlete: log-today /
+  Sunday week-close; coach: weekend to-review). No push infra (that's below).
 
-Plug these in where the tasks below say "William's list."
+### Still open / for next session
+- **Task 4 — delete-a-run "redo":** the delete already exists (see below).
+  Confirm with William if he wants it reworded / more prominent.
+- **Real push notifications** (buzz the phone when the app is closed): still a
+  future build — see the new section at the bottom.
+- **Before go-live:** remove the `fnh4mv+coach` test coach from `staff_emails`
+  once Dunbar/Bradley have their accounts.
 
 ---
 
@@ -91,8 +100,24 @@ Plan:
    run-type chip reads "Training run", delete/redo behaves as agreed.
 5. Update `CLAUDE.md` status + tick items here.
 
+## Real push notifications (deferred — the "buzz the phone" version)
+
+Shipped now = **in-app** red-dot nudges (only seen when the app is open). To
+actually alert athletes when the app is closed (end-of-day "log your run",
+Sunday deadline), we need real web push. Plan when we do it:
+1. PWA install first — iOS only allows web push for home-screen-installed PWAs
+   (iOS 16.4+). That install is part of the Phase 6 polish below, so do push
+   right after.
+2. Generate VAPID keys → add `NEXT_PUBLIC_VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY`
+   to Vercel env (placeholders already noted in `.env.example`).
+3. Service worker + a "turn on reminders" permission prompt in the athlete UI.
+4. A Vercel Cron job that runs ~evening + Sunday and sends push to athletes who
+   haven't logged. (Optional email fallback via Resend for anyone not installed.)
+Effort: real but bounded. In-app dots cover a lot until then.
+
 ## Not on William's list but worth doing before real athletes (Phase 6)
 
 - Favicon (there's none — `/favicon.ico` 404s), page titles, PWA manifest +
-  icons so it installs to the home screen, nicer empty-state screens.
+  icons so it installs to the home screen (also unblocks push above), nicer
+  empty-state screens.
 - Change the trial password later (`Outerbanks14$` is in the chat transcript).
