@@ -16,7 +16,9 @@ export type RunType = "workout" | "long" | "aerobic";
 export const RUN_TYPE_LABELS: Record<RunType, string> = {
   workout: "Workout",
   long: "Long run",
-  aerobic: "Aerobic",
+  // Stored value stays "aerobic" (internal); the team calls this a training run
+  // (TR) — the everyday baseline run.
+  aerobic: "Training run",
 };
 /** Short mark for the dense coach grid; aerobic stays unmarked (it's the baseline). */
 export const RUN_TYPE_MARKS: Record<RunType, string> = {
