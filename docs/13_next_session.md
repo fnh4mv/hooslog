@@ -13,18 +13,17 @@ Real athletes are already signing up and logging. Treat the DB as production.
 
 ---
 
-## ⛔ BLOCKING — William only (Supabase dashboard, ~5 min)
+## ⛔ BLOCKING — coach onboarding (mostly DONE 2026-08-17 evening)
 
-**The coach-impersonation fix.** Signup grants `role='coach'` to whoever types
-a coach email, and email confirmation is currently OFF, so the address alone is
-the credential. Both coach emails are **parked out of `staff_emails`** as a
-mitigation, which means **Dunbar and Bradley cannot sign up until this is done.**
+**The coach-impersonation fix — status:**
 
-1. Supabase → Auth → **URL Configuration** → Site URL =
-   `https://hooslog-william-s-projects-aaa81194.vercel.app`; add it to the
-   redirect allowlist. (It still points at localhost.)
-2. Supabase → Auth → **turn "Confirm email" ON.**
-3. Re-add the coaches:
+1. ~~Site URL + redirect allowlist~~ — **DONE** (Claude, via the Chrome
+   extension, which CAN now attach to supabase.com — the old blocker is gone).
+   Site URL = production; allowlist = `…vercel.app/**`. Verified on reload.
+2. ~~Confirm email ON~~ — **DONE**, verified saved ("Successfully updated
+   settings", toggle green on reload).
+3. **Re-add the coaches** — SQL editor paste (kept on William's clipboard at
+   the end of the 08-17 session):
    ```sql
    insert into public.staff_emails (email, note) values
      ('hfb5af@virginia.edu', 'Coach — Trevor Dunbar'),
@@ -36,26 +35,26 @@ mitigation, which means **Dunbar and Bradley cannot sign up until this is done.*
    *squatted* to block the real person — the AFTER INSERT trigger writes the
    profile row regardless. Claiming early is the belt-and-braces.)
 5. Then remove the test coach: `delete from public.staff_emails where email =
-   'fnh4mv+coach@virginia.edu';` — after 0006 this **actually revokes** access.
+   'fnh4mv+coach@virginia.edu';` — with 0006 applied this **actually revokes**.
 
-**Also:** rotate the trial account passwords. The value was in a chat
-transcript and is still in git history (commit 773532e); deleting the line was
-not remediation.
+**⚠ Email rate limit (new finding, matters for the roster wave):** the
+built-in Supabase mailer sends **2 emails/hour** (Auth → Rate Limits; field is
+locked without custom SMTP). Two coaches signing up tonight fit exactly.
+~27 athletes signing up with confirmation ON do NOT — before inviting the
+roster, either wire custom SMTP (Resend free tier, then raise the limit) or
+accept a very staggered signup. Also note confirmation emails may land in spam
+(generic supabase.io sender) — tell signups to check.
 
-## 📋 Paste this migration (written, tested to build, not yet applied)
+~~Rotate the trial account passwords~~ — **William declined 2026-08-17**
+("don't need to rotate"); the value remains in git history (commit 773532e) on
+a private repo. Decision recorded, item closed.
 
-`supabase/migrations/0006_audit_hardening.sql` — SQL editor → paste → Run.
-- `is_coach()` now requires **current** `staff_emails` membership, so removing
-  a row revokes access (previously it did not — the documented go-live step
-  left the test coach fully privileged).
-- `role` changes are service-role only — a coach can no longer mint coaches or
-  demote the head coach.
-- Athletes lose hard-DELETE on `logs` (app only soft-deletes anyway), so a pain
-  flag the coach already read can't be erased; `created_at` is pinned.
-- Athletes can't soft-delete a week row out from under the coach's comment.
-- `search_path` includes `pg_temp` on SECURITY DEFINER functions.
+## 📋 Migration status
 
-Verify block at the bottom should return `1, 0, 1` and only intended coaches.
+`supabase/migrations/0006_audit_hardening.sql` — **APPLIED 2026-08-17**
+(William ran it in the SQL editor). `is_coach()` now requires current
+`staff_emails` membership; role changes are service-role only; no athlete
+hard-DELETE on logs; `created_at` pinned; week rows can't be athlete-deleted.
 
 ---
 
