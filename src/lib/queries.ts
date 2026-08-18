@@ -192,6 +192,9 @@ export type Alert = {
   dateISO: string;
   kind: "pain" | "question";
   detail: string;
+  /** The coach has reviewed this day (check or comment) since it was last
+   *  edited — handled alerts drop out of the strip's active list. */
+  handled: boolean;
 };
 
 export type CoachWeek = {
@@ -226,7 +229,7 @@ export async function getCoachWeek(
   const ALERT_LOOKBACK_DAYS = 3;
   const alertFromISO = isoDate(addDays(weekStart, -ALERT_LOOKBACK_DAYS));
 
-  const [rosterRes, weeksRes, logsRes, plansRes] = await Promise.all([
+  const [rosterRes, weeksRes, logsRes, plansRes, reviewsRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("*")
@@ -252,11 +255,33 @@ export async function getCoachWeek(
       .eq("week_start", weekStartISO)
       .is("deleted_at", null)
       .order("day"),
+    supabase
+      .from("day_reviews")
+      .select("athlete_id, log_date, updated_at")
+      .gte("log_date", alertFromISO)
+      .lte("log_date", weekEndISO)
+      .is("deleted_at", null),
   ]);
 
   const roster = ((rosterRes.data as Profile[] | null) ?? []).sort((a, b) =>
     rosterKey(a).localeCompare(rosterKey(b)),
   );
+
+  // When was each day last reviewed? A live day_review (check or comment)
+  // means the coach acted on that day, so its alerts leave the active strip.
+  // Compared against the log's own updated_at below: an entry edited AFTER
+  // the review — a new pain note, a changed question, even a fixed distance —
+  // brings the alert back rather than hiding behind Tuesday's check-off.
+  const dayReviewedAt = new Map<string, string>();
+  for (const r of (reviewsRes.data as
+    | Pick<DayReview, "athlete_id" | "log_date" | "updated_at">[]
+    | null) ?? []) {
+    dayReviewedAt.set(`${r.athlete_id}|${r.log_date}`, r.updated_at);
+  }
+  const isHandled = (log: Log): boolean => {
+    const reviewed = dayReviewedAt.get(`${log.athlete_id}|${log.log_date}`);
+    return reviewed !== undefined && Date.parse(reviewed) >= Date.parse(log.updated_at);
+  };
 
   const weekByAthlete = new Map<string, AthleteWeek>();
   for (const w of (weeksRes.data as AthleteWeek[] | null) ?? []) {
@@ -288,17 +313,18 @@ export async function getCoachWeek(
     // mileage, never a grid cell.
     if (idx < 0 || idx > 6) {
       const athleteName = nameById.get(log.athlete_id) as string;
+      const handled = isHandled(log);
       if (log.pain_flag) {
         alerts.push({
           athleteId: log.athlete_id, athleteName, dateISO: log.log_date,
-          kind: "pain", detail: log.pain_note?.trim() || "no detail given",
+          kind: "pain", detail: log.pain_note?.trim() || "no detail given", handled,
         });
       }
       const q = log.question?.trim();
       if (q) {
         alerts.push({
           athleteId: log.athlete_id, athleteName, dateISO: log.log_date,
-          kind: "question", detail: q,
+          kind: "question", detail: q, handled,
         });
       }
       continue;
@@ -324,6 +350,7 @@ export async function getCoachWeek(
     cell.hasQuestion ||= Boolean(question);
 
     const athleteName = nameById.get(log.athlete_id) as string;
+    const handled = isHandled(log);
     if (log.pain_flag) {
       alerts.push({
         athleteId: log.athlete_id,
@@ -331,6 +358,7 @@ export async function getCoachWeek(
         dateISO: log.log_date,
         kind: "pain",
         detail: log.pain_note?.trim() || "no detail given",
+        handled,
       });
     }
     if (question) {
@@ -340,6 +368,7 @@ export async function getCoachWeek(
         dateISO: log.log_date,
         kind: "question",
         detail: question,
+        handled,
       });
     }
   }
@@ -363,9 +392,10 @@ export async function getCoachWeek(
     };
   });
 
-  // Pain before questions, then newest day first: the order the coach should
-  // work them in.
+  // Unhandled first, then pain before questions, then newest day first: the
+  // order the coach should work them in.
   alerts.sort((a, b) => {
+    if (a.handled !== b.handled) return a.handled ? 1 : -1;
     if (a.dateISO !== b.dateISO) return a.dateISO < b.dateISO ? 1 : -1;
     if (a.kind !== b.kind) return a.kind === "pain" ? -1 : 1;
     return a.athleteName.localeCompare(b.athleteName);

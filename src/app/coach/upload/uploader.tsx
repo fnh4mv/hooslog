@@ -29,7 +29,11 @@ export function Uploader() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<UploadPreview | null>(null);
   const [errors, setErrors] = useState<ImportError[]>([]);
-  const [done, setDone] = useState<{ weekStartISO: string; goalsSet: number } | null>(null);
+  const [done, setDone] = useState<{
+    weekStartISO: string;
+    goalsSet: number;
+    skippedEmails: string[];
+  } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [busy, startTransition] = useTransition();
 
@@ -81,7 +85,11 @@ export function Uploader() {
         return;
       }
       setPreview(null);
-      setDone({ weekStartISO: res.weekStartISO, goalsSet: res.goalsSet });
+      setDone({
+        weekStartISO: res.weekStartISO,
+        goalsSet: res.goalsSet,
+        skippedEmails: res.skippedEmails,
+      });
       router.refresh();
     });
   }
@@ -95,6 +103,14 @@ export function Uploader() {
           {prettyWeek(done.weekStartISO)} — {done.goalsSet}{" "}
           {done.goalsSet === 1 ? "goal" : "goals"} set. Athletes see it now.
         </p>
+        {done.skippedEmails.length > 0 && (
+          <p className="mx-auto mt-2 max-w-md text-[13px] leading-snug text-ink-2">
+            <b className="text-navy">No goal set</b> for{" "}
+            {done.skippedEmails.join(", ")} — no account with that email yet.
+            Once they sign up, re-upload this same file to give them their
+            target.
+          </p>
+        )}
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           <Link
             href={`/coach?week=${done.weekStartISO}`}
@@ -271,7 +287,8 @@ export function Uploader() {
             {preview.missingFromFile.length > 0 && (
               <p className="mt-3 text-[12px] leading-snug text-ink-2">
                 <b className="text-navy">Not in this file:</b>{" "}
-                {preview.missingFromFile.join(", ")} — they keep whatever goal they already had.
+                {preview.missingFromFile.join(", ")} — they get no goal for this
+                week (unless one was already set for it).
               </p>
             )}
           </section>
@@ -293,36 +310,47 @@ export function Uploader() {
             </section>
           )}
 
-          {unmatched.length > 0 ? (
+          {/* Unmatched emails no longer block the week: during onboarding
+              most weeks have someone who hasn't signed up yet, and holding
+              the workouts hostage helps nobody. The plan and every matched
+              goal post; the skipped names are shown here AND on the done
+              screen — visible, never silent. */}
+          {unmatched.length > 0 && (
             <section className="rounded-2xl border border-orange bg-orange-soft p-4">
               <p className="text-[13px] font-semibold leading-snug text-ink">
                 {unmatched.length === 1
                   ? "One email doesn't match an athlete account"
-                  : `${unmatched.length} emails don't match an athlete account`}
-                , so this can&apos;t post yet. Either fix the spelling in the Goals tab, or wait
-                until they&apos;ve signed up — then upload again.
+                  : `${unmatched.length} emails don't match an athlete account`}{" "}
+                (marked above). The plan and the other goals still post —{" "}
+                {unmatched.length === 1 ? "that athlete" : "those athletes"} just
+                won&apos;t get a mileage target. If it&apos;s a typo, fix the Goals tab and
+                re-upload; if they haven&apos;t signed up yet, re-upload this same
+                file once they have.
               </p>
             </section>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={confirm}
-                disabled={busy}
-                className="flex-1 rounded-xl bg-navy py-3 text-[14px] font-bold text-white shadow-md disabled:opacity-60"
-              >
-                {busy ? "Posting…" : "Post this week"}
-              </button>
-              <button
-                type="button"
-                onClick={reset}
-                disabled={busy}
-                className="rounded-xl border-[1.5px] border-line bg-white px-5 py-3 text-[14px] font-bold text-ink-2 disabled:opacity-60"
-              >
-                Cancel
-              </button>
-            </div>
           )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={confirm}
+              disabled={busy}
+              className="flex-1 rounded-xl bg-navy py-3 text-[14px] font-bold text-white shadow-md disabled:opacity-60"
+            >
+              {busy
+                ? "Posting…"
+                : unmatched.length > 0
+                  ? `Post this week (${unmatched.length} without a goal)`
+                  : "Post this week"}
+            </button>
+            <button
+              type="button"
+              onClick={reset}
+              disabled={busy}
+              className="rounded-xl border-[1.5px] border-line bg-white px-5 py-3 text-[14px] font-bold text-ink-2 disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
         </>
       )}
     </div>

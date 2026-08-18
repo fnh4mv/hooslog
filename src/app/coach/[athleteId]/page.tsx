@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCoachAthleteWeek } from "@/lib/queries";
-import { addDays, fmtDayShort, fromISO, isoDate, mondayOf, todayET } from "@/lib/dates";
+import { addDays, fmtDayShort, fromISO, isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
 import { fullName } from "@/lib/names";
 import { KIND_LABELS, RUN_TYPE_LABELS, type Log } from "@/lib/types";
 import { CoachHeader } from "../header";
@@ -69,7 +69,7 @@ export default async function AthleteDrillIn({
   if (!UUID.test(athleteId)) notFound();
 
   const supabase = await createClient();
-  const today = todayET();
+  const today = trainingTodayET(); // same 3 AM rollover as the grid
   const todayISO = isoDate(today);
   const currentMonday = mondayOf(today);
   const weekParam = typeof sp.week === "string" ? fromISO(sp.week) : null;
@@ -95,7 +95,8 @@ export default async function AthleteDrillIn({
   const totalMiles =
     Math.round(logs.reduce((sum, l) => sum + Number(l.distance_mi), 0) * 10) / 10;
   const goal = athleteWeek?.mileage_goal == null ? null : Number(athleteWeek.mileage_goal);
-  const pct = goal && goal > 0 ? Math.min(100, Math.round((totalMiles / goal) * 100)) : 0;
+  // Uncapped (the bar clamps): 112% is exactly what the coach needs to see.
+  const pct = goal && goal > 0 ? Math.round((totalMiles / goal) * 100) : 0;
   const daysLogged = new Set(logs.map((l) => l.log_date)).size;
 
   const athleteHref = (id: string) => `/coach/${id}?week=${weekISO}`;
@@ -165,7 +166,10 @@ export default async function AthleteDrillIn({
           </div>
           {goal !== null && (
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-navy-soft">
-              <div className="h-full rounded-full bg-navy" style={{ width: `${pct}%` }} />
+              <div
+                className="h-full rounded-full bg-navy"
+                style={{ width: `${Math.min(100, pct)}%` }}
+              />
             </div>
           )}
         </section>

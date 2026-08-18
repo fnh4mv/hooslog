@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCoachWeek, type GridCell } from "@/lib/queries";
-import { addDays, fromISO, isoDate, mondayOf, todayET } from "@/lib/dates";
+import { addDays, fromISO, isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
 import { shortName } from "@/lib/names";
 import { RUN_TYPE_MARKS } from "@/lib/types";
 import { AlertStrip } from "./alert-strip";
@@ -58,7 +58,9 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
   const sp = await searchParams;
   const supabase = await createClient();
 
-  const today = todayET();
+  // Training day, not calendar day: until 3 AM ET the coach still opens on
+  // the closing week — athletes are still logging Sunday's runs into it.
+  const today = trainingTodayET();
   const todayISO = isoDate(today);
   const currentMonday = mondayOf(today);
   const weekParam = typeof sp.week === "string" ? fromISO(sp.week) : null;
@@ -178,9 +180,11 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
 
               <tbody>
                 {rows.map((row) => {
+                  // Uncapped — over-goal mileage is a signal, not a rounding
+                  // artifact. The bar itself clamps at 100.
                   const pct =
                     row.mileageGoal && row.mileageGoal > 0
-                      ? Math.min(100, Math.round((row.totalMiles / row.mileageGoal) * 100))
+                      ? Math.round((row.totalMiles / row.mileageGoal) * 100)
                       : 0;
                   return (
                     <tr
@@ -244,7 +248,7 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
                           >
                             <div
                               className="h-full rounded-full bg-navy"
-                              style={{ width: `${pct}%` }}
+                              style={{ width: `${Math.min(100, pct)}%` }}
                             />
                           </div>
                         )}

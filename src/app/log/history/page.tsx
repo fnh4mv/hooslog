@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getHistory } from "@/lib/queries";
-import { addDays, fmtMonthDay, fromISO, isoDate, mondayOf, todayET } from "@/lib/dates";
+import { addDays, fmtMonthDay, fromISO, isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
 
 /** "Aug 3 – 9", or "Aug 31 – Sep 6" across a month boundary. */
 function fmtWeekRange(start: Date): string {
@@ -21,7 +21,9 @@ export default async function HistoryPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null; // middleware already bounces signed-out users
 
-  const currentMonday = mondayOf(todayET());
+  // Training day: until 3 AM ET the closing week is still "this week",
+  // not history.
+  const currentMonday = mondayOf(trainingTodayET());
   const weeks = await getHistory(supabase, user.id, isoDate(currentMonday));
 
   return (

@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { mondayOf, todayET } from "@/lib/dates";
+import { mondayOf, trainingTodayET } from "@/lib/dates";
 import { CoachHeader } from "../header";
 import { Uploader } from "./uploader";
 
 /** Plan upload (locked 23): fill the template, drop it here, check it, post it. */
 export default function UploadPage() {
-  const weekStart = mondayOf(todayET());
+  const weekStart = mondayOf(trainingTodayET());
 
   return (
     <div className="min-h-screen">

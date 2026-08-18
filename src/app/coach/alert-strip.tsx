@@ -41,10 +41,27 @@ export function AlertStrip({
     );
   }
 
-  const pain = alerts.filter((a) => a.kind === "pain");
-  const questions = alerts.filter((a) => a.kind === "question");
-  const shown = alerts.slice(0, MAX_SHOWN);
-  const hidden = alerts.length - shown.length;
+  // Handled = the coach reviewed that day since it was last edited (see
+  // getCoachWeek). Those collapse into a count so Sunday's strip isn't still
+  // shouting about Tuesday's flag that was dealt with on Tuesday.
+  const active = alerts.filter((a) => !a.handled);
+  const handledCount = alerts.length - active.length;
+
+  if (active.length === 0) {
+    return (
+      <div className="border-b border-line bg-green-soft">
+        <div className="mx-auto max-w-[1280px] px-4 py-2.5 text-[13px] font-semibold text-green">
+          ✓ All {handledCount === 1 ? "1 flagged item" : `${handledCount} flagged items`} this
+          week handled — nothing waiting.
+        </div>
+      </div>
+    );
+  }
+
+  const pain = active.filter((a) => a.kind === "pain");
+  const questions = active.filter((a) => a.kind === "question");
+  const shown = active.slice(0, MAX_SHOWN);
+  const hidden = active.length - shown.length;
   const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
   return (
@@ -90,6 +107,11 @@ export function AlertStrip({
             {hidden > 0 && (
               <span className="text-[12px] font-bold text-ink-2">
                 +{hidden} more — open an athlete to see everything
+              </span>
+            )}
+            {handledCount > 0 && (
+              <span className="text-[12px] font-bold text-green">
+                ✓ {handledCount} handled
               </span>
             )}
           </span>

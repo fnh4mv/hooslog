@@ -74,17 +74,33 @@ export async function saveDayReview(
   return { ok: true };
 }
 
+/** The coach-owned review state of one week, as a client last saw it. */
+export type WeekReviewState = { comment: string | null; reviewed: boolean };
+
+export type WeekReviewResult =
+  | { ok: true; saved: WeekReviewState }
+  /** `current` present = the week changed under this tab; nothing was written. */
+  | { ok: false; error: string; current?: WeekReviewState };
+
 /**
  * The week-level comment and the "reviewed" stamp. Writes only coach-owned
  * columns — the payload never mentions athlete_summary, so an athlete editing
  * their reflection at the same moment can't be overwritten.
+ *
+ * Concurrency: the write is a compare-and-swap against `expected` — the
+ * comment/reviewed state this tab loaded. Two coaches (or one stale tab)
+ * can no longer silently erase each other; the loser is told what the week
+ * says now and can save again to replace it deliberately. The CAS runs on
+ * the coach-owned columns rather than updated_at so an athlete saving their
+ * summary into the same row never triggers a false conflict.
  */
 export async function saveWeekReview(
   athleteId: string,
   weekStartISO: string,
   comment: string,
   reviewed: boolean,
-): Promise<ActionResult> {
+  expected: WeekReviewState,
+): Promise<WeekReviewResult> {
   const auth = await requireCoach();
   if (!auth.ok) return { ok: false, error: auth.error };
   const { supabase } = auth;
@@ -99,18 +115,70 @@ export async function saveWeekReview(
     return { ok: false, error: `Comment is too long (max ${MAX_TEXT} characters).` };
   }
 
-  const { error } = await supabase.from("athlete_weeks").upsert(
-    {
-      athlete_id: athleteId,
-      week_start: weekISO,
-      coach_comment: text,
-      reviewed_at: reviewed ? new Date().toISOString() : null,
-    },
-    { onConflict: "athlete_id,week_start" },
-  );
+  const payload = {
+    coach_comment: text,
+    reviewed_at: reviewed ? new Date().toISOString() : null,
+  };
+
+  // The comment is normalized (trimmed, "" → null) the same way before every
+  // save, so comparing against what this tab last saved is exact.
+  const expectedComment = cleanText(expected?.comment);
+  const expectedReviewed = expected?.reviewed === true;
+
+  let update = supabase
+    .from("athlete_weeks")
+    .update(payload)
+    .eq("athlete_id", athleteId)
+    .eq("week_start", weekISO)
+    .is("deleted_at", null);
+  update =
+    expectedComment === null
+      ? update.is("coach_comment", null)
+      : update.eq("coach_comment", expectedComment);
+  update = expectedReviewed
+    ? update.not("reviewed_at", "is", null)
+    : update.is("reviewed_at", null);
+  const { data: updated, error } = await update.select("athlete_id");
   if (error) return { ok: false, error: "Couldn't save — try again." };
+
+  if (!updated || updated.length === 0) {
+    // Zero rows: either the week row doesn't exist yet, or someone else
+    // changed the review after this tab loaded it. Look and see which.
+    const { data: row, error: readError } = await supabase
+      .from("athlete_weeks")
+      .select("coach_comment, reviewed_at")
+      .eq("athlete_id", athleteId)
+      .eq("week_start", weekISO)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (readError) return { ok: false, error: "Couldn't save — try again." };
+
+    if (row) {
+      const current: WeekReviewState = {
+        comment: (row.coach_comment as string | null) ?? null,
+        reviewed: row.reviewed_at !== null,
+      };
+      const now = current.comment
+        ? `It now says: “${current.comment.length > 180 ? `${current.comment.slice(0, 179)}…` : current.comment}”`
+        : "Its comment is now empty";
+      return {
+        ok: false,
+        current,
+        error: `Not saved — this week's review changed after you opened it (the other coach, or another tab). ${now}. Your text is still here; save again to replace it.`,
+      };
+    }
+
+    // First write for this week. A plain insert (not upsert) so a concurrent
+    // first write collides here instead of silently winning.
+    const { error: insertError } = await supabase
+      .from("athlete_weeks")
+      .insert({ athlete_id: athleteId, week_start: weekISO, ...payload });
+    if (insertError) {
+      return { ok: false, error: "Couldn't save — someone may have just written this week. Try again." };
+    }
+  }
 
   revalidatePath(`/coach/${athleteId}`);
   revalidatePath("/coach");
-  return { ok: true };
+  return { ok: true, saved: { comment: text, reviewed } };
 }

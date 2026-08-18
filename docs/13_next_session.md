@@ -61,56 +61,53 @@ Verify block at the bottom should return `1, 0, 1` and only intended coaches.
 
 ## Still open, ranked (all confirmed by the audit)
 
-### Correctness — do first
-1. **Midnight-ET rollover** (`src/app/log/page.tsx:42`, `src/lib/dates.ts`).
-   A run logged after midnight ET lands on the wrong day, and on Sunday night
-   the wrong *week*. Distance runners log late. Consider an explicit "which day
-   is this for?" affordance rather than only inferring from the clock.
-2. **Week comment last-write-wins** (`src/app/coach/actions.ts:102`). Two
-   coaches (or one stale tab) silently overwrite each other. Needs optimistic
-   concurrency: send the loaded `updated_at`, reject on mismatch, tell the
-   coach to reload. Matters now that there are genuinely two coaches.
-3. **Goal % capped at 100** (`src/app/log/page.tsx:70`) hides over-mileage from
-   both sides — a real injury-risk signal for a distance program.
-4. **`readDate` rolls invalid dates over** (`src/lib/importer.ts:74`) instead of
-   rejecting, unlike `fromISO`. A typed 2026-02-31 becomes March 3.
+### ✅ Fixed 2026-08-17 evening (items renumbered below)
+- ~~Midnight-ET rollover~~ — training day now rolls at **3 AM ET**
+  (`trainingTodayET()` in `src/lib/dates.ts`), used by every page for default
+  day/week, nudges, and grids. `/log` shows an after-midnight banner naming the
+  day it will log to, with a link to the new day instead; server validation
+  still accepts either day.
+- ~~Week comment last-write-wins~~ — `saveWeekReview` is now a compare-and-swap
+  on the coach-owned columns (not `updated_at`, so athlete summary saves can't
+  false-conflict). On conflict nothing is written; the coach sees what the week
+  says now and can save again to deliberately replace it.
+- ~~Goal % capped at 100~~ — uncapped athlete + coach + drill-in; bars clamp.
+- ~~`readDate` rollover~~ — round-trip check, same rule as `fromISO`.
+- ~~Importer refuses whole week over unmatched emails~~ — now posts the plan +
+  matched goals; skipped emails reported in preview, confirm button, and the
+  done screen. Fixed app-side (commitUpload filters), `import_week` unchanged.
+- ~~No handled state on alerts~~ — an alert is handled when a live day_review
+  for that athlete+day is **newer than the log**; athlete edits after the
+  review resurface it. Handled alerts collapse to "✓ N handled"; all-handled
+  shows a green strip. Code-only, no schema change.
+- ~~Wrong "keeps existing goal" preview copy~~ · ~~no past-week warning~~ —
+  copy corrected; B3 in a past week now warns (never blocks backfill).
 
 ### Coach workflow
-5. **Importer refuses the entire week** — workouts included — if any athlete in
-   the Goals tab hasn't signed up yet (`src/app/coach/upload/uploader.tsx:296`).
-   During onboarding that is most weeks. Should post the plan and report the
-   unmatched athletes, or offer "post plan only".
-6. **No handled/answered state on alerts** (`src/lib/queries.ts:303`). Sunday's
-   strip still lists every flag dealt with on Tuesday. Needs a dismiss/handled
-   marker — probably tied to `day_reviews`.
-7. **Importer preview copy is wrong**: says athletes missing from the Goals tab
-   "keep whatever goal they already had" — on a new week they get *no* goal
-   (`src/app/coach/upload/actions.ts:97`).
-8. **No past-week warning on upload** (`src/lib/importer.ts:131`) — the
-   template ships a fixed default date, making that the likeliest coach error.
-9. Coach can't see who hasn't signed up, or who hasn't logged, without reading
-   210 cells.
+1. Coach can't see who hasn't signed up, or who hasn't logged, without reading
+   210 cells. (Signed-up-vs-roster needs coach read access to `athlete_emails`
+   — check its RLS before building.)
 
 ### Athlete UX
-10. **Nothing typed persists until Save** — tapping another day chip or
-    backgrounding the phone discards the entry (`day-forms.tsx:115`).
-11. **Sunday nudge shames new athletes** with an impossible count and a
-    deadline the app doesn't enforce (`src/app/log/page.tsx:78`).
-12. **"Coach sees this today" only appears after opting in** — the killer
-    feature is invisible on day one.
-13. **RPE + run-type chips ~27px** at 390px — below a reliable tap target.
-14. Save sits below four optional fields, off-screen behind the keyboard.
+2. **Nothing typed persists until Save** — tapping another day chip or
+   backgrounding the phone discards the entry (`day-forms.tsx:115`).
+3. **Sunday nudge shames new athletes** with an impossible count and a
+   deadline the app doesn't enforce (`src/app/log/page.tsx`).
+4. **"Coach sees this today" only appears after opting in** — the killer
+   feature is invisible on day one.
+5. **RPE + run-type chips ~27px** at 390px — below a reliable tap target.
+6. Save sits below four optional fields, off-screen behind the keyboard.
 
 ### Visual system
-15. Thirteen font sizes, two spellings of the same value, three near-identical
-    weights; the athlete's two screens have different headers; `SignOutButton`
-    ships a layout margin two callers cancel.
-16. Grid rows 41px with no zebra beyond the new odd-row tint — re-check density
-    once there are 30 real athletes.
+7. Thirteen font sizes, two spellings of the same value, three near-identical
+   weights; the athlete's two screens have different headers; `SignOutButton`
+   ships a layout margin two callers cancel.
+8. Grid rows 41px with no zebra beyond the new odd-row tint — re-check density
+   once there are 30 real athletes.
 
 ### Phase 6 polish (unblocks real push)
-17. Favicon (none — `/favicon.ico` 404s), page titles, PWA manifest + icons so
-    it installs to the home screen.
+9. Favicon (none — `/favicon.ico` 404s), page titles, PWA manifest + icons so
+   it installs to the home screen.
 
 ## Real push notifications (deferred by design)
 

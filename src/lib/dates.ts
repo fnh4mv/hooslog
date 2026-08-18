@@ -68,6 +68,22 @@ export function todayET(): Date {
   return new Date(get("year"), get("month") - 1, get("day"));
 }
 
+/**
+ * The training day rolls over at 3 AM ET, not midnight. A run logged at
+ * 12:40 AM is still last night's run — and on a Sunday night it belongs to
+ * the closing week, not the new one. Distance runners log late; nobody has
+ * finished the *next* day's run by 3 AM.
+ */
+export const TRAINING_DAY_ROLLOVER_HOUR = 3;
+
+/** Today for training purposes: todayET(), still "yesterday" before 3 AM ET.
+ *  Drives which day/week the portals open on — validation stays on todayET()
+ *  so a genuine after-midnight run can still be logged to the new day. */
+export function trainingTodayET(): Date {
+  const d = todayET();
+  return hourET() < TRAINING_DAY_ROLLOVER_HOUR ? addDays(d, -1) : d;
+}
+
 /** Current hour (0–23) in Eastern time. Used to hold the "log today" nudge
  *  until the end of the day rather than nagging first thing in the morning. */
 export function hourET(): number {

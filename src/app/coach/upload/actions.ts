@@ -20,7 +20,8 @@ export type UploadPreview = {
   plans: string[]; // 7, Monday-first
   goals: GoalPreview[];
   warnings: ImportWarning[];
-  /** Athletes with an account who aren't in the file — they keep any goal they already had. */
+  /** Athletes with an account who aren't in the file. On a fresh week they get
+   *  NO goal (a goal already set for this exact week is left alone). */
   missingFromFile: string[];
   replacesExistingPlan: boolean;
 };
@@ -30,7 +31,13 @@ export type PreviewResult =
   | { ok: false; errors: ImportError[] };
 
 export type CommitResult =
-  | { ok: true; weekStartISO: string; goalsSet: number }
+  | {
+      ok: true;
+      weekStartISO: string;
+      goalsSet: number;
+      /** Emails in the file with no athlete account — their goals were NOT set. */
+      skippedEmails: string[];
+    }
   | { ok: false; errors: ImportError[] };
 
 async function fileFrom(formData: FormData): Promise<Buffer | ImportError> {
@@ -104,6 +111,11 @@ export async function previewUpload(formData: FormData): Promise<PreviewResult> 
  * Step 2: write it. Re-parses the same file server-side rather than trusting
  * a payload from the browser, then hands the whole import to `import_week`
  * (migration 0002) so plans and goals land in one transaction or not at all.
+ *
+ * Emails with no matching athlete account are filtered out HERE, not sent to
+ * import_week (which would refuse the entire week — workouts included, which
+ * during onboarding is most weeks). Not a silent drop: the preview showed
+ * each one as "no account", and the result names them again.
  */
 export async function commitUpload(formData: FormData): Promise<CommitResult> {
   const auth = await requireCoach();
@@ -117,10 +129,27 @@ export async function commitUpload(formData: FormData): Promise<CommitResult> {
   if (!parsed.ok) return parsed;
   const { weekStartISO, plans, goals } = parsed.data;
 
+  // Same roster scope as the preview and import_week v2: a goal must never
+  // land on an account the coach can't see.
+  const { data: roster, error: rosterError } = await supabase
+    .from("profiles")
+    .select("email")
+    .eq("role", "athlete")
+    .in("status", ["active", "injured"])
+    .is("deleted_at", null);
+  if (rosterError) {
+    return { ok: false, errors: [{ where: "Import", message: "Nothing was saved. Couldn't read the roster — try again." }] };
+  }
+  const rosterEmails = new Set(
+    ((roster as { email: string }[] | null) ?? []).map((p) => p.email),
+  );
+  const matched = goals.filter((g) => rosterEmails.has(g.email));
+  const skippedEmails = goals.filter((g) => !rosterEmails.has(g.email)).map((g) => g.email);
+
   const { data, error } = await supabase.rpc("import_week", {
     p_week_start: weekStartISO,
     p_plans: plans,
-    p_goals: goals.map((g) => ({ email: g.email, goal: g.goal })),
+    p_goals: matched.map((g) => ({ email: g.email, goal: g.goal })),
   });
 
   if (error) {
@@ -144,5 +173,5 @@ export async function commitUpload(formData: FormData): Promise<CommitResult> {
 
   revalidatePath("/coach");
   revalidatePath("/log");
-  return { ok: true, weekStartISO, goalsSet };
+  return { ok: true, weekStartISO, goalsSet, skippedEmails };
 }

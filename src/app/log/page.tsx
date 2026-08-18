@@ -10,6 +10,7 @@ import {
   isoDate,
   mondayOf,
   todayET,
+  trainingTodayET,
 } from "@/lib/dates";
 import { SignOutButton } from "../signout";
 import { DayForms } from "./day-forms";
@@ -25,9 +26,14 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
   if (!user) return null; // middleware already bounces signed-out users
 
   // ---- which week / which day ----
-  const today = todayET();
+  // "Today" is the training day: it doesn't roll over until 3 AM ET, so a
+  // post-midnight save defaults onto the run it belongs to — and on Sunday
+  // night, into the closing week rather than the new one.
+  const today = trainingTodayET();
   const todayISO = isoDate(today);
   const currentMonday = mondayOf(today);
+  const actualTodayISO = isoDate(todayET());
+  const afterMidnight = actualTodayISO !== todayISO;
 
   const weekParam = typeof sp.week === "string" ? fromISO(sp.week) : null;
   const weekStart = weekParam ? mondayOf(weekParam) : currentMonday; // snap to Monday
@@ -44,7 +50,9 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
         ? today
         : weekStart;
   const selectedISO = isoDate(selected);
-  const isFutureDay = selectedISO > todayISO;
+  // Future-gating runs on the real calendar day, not the training day, so a
+  // genuine after-midnight run can still be logged onto the new date.
+  const isFutureDay = selectedISO > actualTodayISO;
 
   // ---- data ----
   const { profile, athleteWeek, plans, logs, reviews } = await getWeekData(
@@ -72,7 +80,9 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
   const totalMiles =
     Math.round(logs.reduce((sum, l) => sum + Number(l.distance_mi), 0) * 10) / 10;
   const goal = athleteWeek?.mileage_goal ?? null;
-  const pct = goal ? Math.min(100, Math.round((totalMiles / Number(goal)) * 100)) : 0;
+  // Never capped at 100: running past the goal is an injury-risk signal, and
+  // hiding it from either side is how it goes unnoticed. Only the bar clamps.
+  const pct = goal ? Math.round((totalMiles / Number(goal)) * 100) : 0;
 
   // ---- end-of-day / end-of-week reminder (current week only) ----
   // In-app red-dot nudge (locked decision: no push infra for the trial). Only
@@ -175,7 +185,7 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
           const logged = loggedDates.has(dISO);
           const replied = repliedDates.has(dISO);
           const isToday = dISO === todayISO;
-          const isFuture = dISO > todayISO;
+          const isFuture = dISO > actualTodayISO;
           const isSel = dISO === selectedISO;
           return (
             <Link
@@ -223,6 +233,20 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
           );
         })}
       </div>
+
+      {/* ---- after-midnight note: which day this logs to, and the way out ---- */}
+      {afterMidnight && selectedISO === todayISO && (
+        <div className="rounded-2xl border border-line bg-navy-soft px-4 py-2.5 text-[13px] leading-snug text-ink">
+          Past midnight — this still logs as <b>{fmtDayShort(today)}</b> until 3 AM.
+          Ran after midnight?{" "}
+          <Link
+            href={`/log?week=${isoDate(mondayOf(addDays(today, 1)))}&day=${isoDate(addDays(today, 1))}`}
+            className="font-bold text-navy underline"
+          >
+            Log it as {fmtDayShort(addDays(today, 1))}
+          </Link>
+        </div>
+      )}
 
       {/* ---- coach's plan for the selected day ---- */}
       <section className="rounded-2xl border border-line border-l-4 border-l-navy bg-white p-4">
@@ -290,7 +314,10 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
         </div>
         {goal !== null && (
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-navy-soft">
-            <div className="h-full rounded-full bg-navy" style={{ width: `${pct}%` }} />
+            <div
+              className="h-full rounded-full bg-navy"
+              style={{ width: `${Math.min(100, pct)}%` }}
+            />
           </div>
         )}
         <div className="mt-2.5 text-xs font-semibold text-ink-2">

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveDayReview, saveWeekReview } from "./actions";
+import { saveDayReview, saveWeekReview, type WeekReviewState } from "./actions";
 
 const INPUT =
   "w-full rounded-xl border-[1.5px] border-line bg-white px-3 py-2 text-[14px] font-medium text-ink outline-none placeholder:font-normal placeholder:text-muted focus:border-orange";
@@ -128,6 +128,14 @@ export function WeekReviewControls({
   const router = useRouter();
   const [comment, setComment] = useState(initialComment ?? "");
   const [reviewed, setReviewed] = useState(initialReviewed);
+  // What this tab believes the saved review is — sent with every save so a
+  // stale tab (or the other coach's tab) is rejected instead of silently
+  // overwriting. On a conflict it re-syncs to the server's state, so the next
+  // save is a deliberate, informed replace.
+  const [expected, setExpected] = useState<WeekReviewState>({
+    comment: initialComment,
+    reviewed: initialReviewed,
+  });
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, startTransition] = useTransition();
@@ -137,15 +145,22 @@ export function WeekReviewControls({
     startTransition(async () => {
       let res: Awaited<ReturnType<typeof saveWeekReview>>;
       try {
-        res = await saveWeekReview(athleteId, weekISO, comment, nextReviewed);
+        res = await saveWeekReview(athleteId, weekISO, comment, nextReviewed, expected);
       } catch {
         res = { ok: false, error: "Couldn't reach the server — check your connection and try again." };
       }
       if (!res.ok) {
         setError(res.error);
+        if (res.current) {
+          setExpected(res.current);
+          // Show the real reviewed state, so saving again can't silently
+          // un-review (or re-review) what the other tab did.
+          setReviewed(res.current.reviewed);
+        }
         return;
       }
-      setReviewed(nextReviewed);
+      setExpected(res.saved);
+      setReviewed(res.saved.reviewed);
       setSaved(true);
       setTimeout(() => setSaved(false), 1600);
       router.refresh();

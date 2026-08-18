@@ -1,5 +1,5 @@
 import readXlsxFile from "read-excel-file/node";
-import { isoDate, mondayOf } from "@/lib/dates";
+import { isoDate, mondayOf, todayET } from "@/lib/dates";
 
 /**
  * Parser for the coach's week-plan template
@@ -66,21 +66,28 @@ function toLocalDate(v: Date): Date {
   return new Date(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate());
 }
 
+/**
+ * A real calendar day from Y/M/D parts, or null. The round-trip check rejects
+ * days that JS would silently roll over — a typed 2026-02-31 must be an error
+ * naming the cell, not a plan quietly posted for March 3 (same rule as
+ * `fromISO` in src/lib/dates.ts).
+ */
+function realDate(y: number, mo: number, day: number): Date | null {
+  const d = new Date(y, mo - 1, day);
+  return d.getFullYear() === y && d.getMonth() === mo - 1 && d.getDate() === day
+    ? d
+    : null;
+}
+
 /** Accepts a real date cell, or text the coach typed as YYYY-MM-DD or M/D/YYYY. */
 function readDate(v: Cell): Date | null {
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : toLocalDate(v);
 
   const s = text(v);
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
-  if (m) {
-    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
+  if (m) return realDate(Number(m[1]), Number(m[2]), Number(m[3]));
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-  if (m) {
-    const d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
+  if (m) return realDate(Number(m[3]), Number(m[1]), Number(m[2]));
   return null;
 }
 
@@ -143,6 +150,14 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     errors.push({
       where: "Week Plan!B3",
       message: `${isoDate(weekDate)} is a ${DAYS[(weekDate.getDay() + 6) % 7]}, and weeks start on Monday. Did you mean ${isoDate(monday)}?`,
+    });
+  } else if (isoDate(weekDate) < isoDate(mondayOf(todayET()))) {
+    // The template ships with a fixed example date, so posting a week that has
+    // already passed is the single likeliest coach mistake. A warning, not an
+    // error — backfilling an old week on purpose stays possible.
+    warnings.push({
+      where: "Week Plan!B3",
+      message: `${isoDate(weekDate)} is a past week — this week started ${isoDate(mondayOf(todayET()))}. If you're planning the week ahead, fix the Monday date in B3 before posting.`,
     });
   }
 
