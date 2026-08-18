@@ -1,127 +1,127 @@
 # 13 — Next session: to-do & redeploy checklist
 
-**Written 2026-08-16 (end of session). Read `CLAUDE.md` first, then this.**
+**Updated 2026-08-17 after the full audit + fix pass. Read `CLAUDE.md` first,
+then `docs/14_audit_2026-08-17.md` for the full findings.**
 
 App is **LIVE**: https://hooslog-william-s-projects-aaa81194.vercel.app
-Deploys auto-run on `git push` to `main`. **Migrations must be pasted into the
-Supabase SQL editor by hand** — there's no API path for DDL: copy the `.sql`,
-paste, Run, check the verify query at the bottom. Env vars are already set in
-Vercel (`vercel env`). Data was wiped clean this session — the only accounts
-that exist are `fnh4mv+coach@virginia.edu` (coach) and `zwh3ga@virginia.edu`
-(a real athlete).
+`git push` to `main` auto-deploys (~90s). **Migrations must be pasted into the
+Supabase SQL editor by hand** — there is no API path for DDL, and the Claude
+Chrome extension cannot attach to supabase.com or vercel.com. Vercel env vars
+are set and manageable from the repo with `vercel env`.
+
+Real athletes are already signing up and logging. Treat the DB as production.
 
 ---
 
-## ✅ DONE 2026-08-16/17 (Tasks 1, 2, 3 shipped + verified live)
+## ⛔ BLOCKING — William only (Supabase dashboard, ~5 min)
 
-- **Task 1 & 2 — closed roster:** `supabase/migrations/0005_closed_roster.sql`
-  applied. Coaches = Dunbar (`hfb5af`), Bradley (`ndt4ve`), + `fnh4mv+coach`
-  test. 30 athletes in `athlete_emails`. Off-roster signups rejected (verified).
-- **Task 3 — "Aerobic" → "Training run":** shipped (label only; stored value
-  still `aerobic`). Verified on prod.
-- **Bonus — in-app reminders shipped:** red-dot nudges (athlete: log-today /
-  Sunday week-close; coach: weekend to-review). No push infra (that's below).
+**The coach-impersonation fix.** Signup grants `role='coach'` to whoever types
+a coach email, and email confirmation is currently OFF, so the address alone is
+the credential. Both coach emails are **parked out of `staff_emails`** as a
+mitigation, which means **Dunbar and Bradley cannot sign up until this is done.**
 
-### Still open / for next session
-- **Task 4 — delete-a-run "redo":** the delete already exists (see below).
-  Confirm with William if he wants it reworded / more prominent.
-- **Real push notifications** (buzz the phone when the app is closed): still a
-  future build — see the new section at the bottom.
-- **Before go-live:** remove the `fnh4mv+coach` test coach from `staff_emails`
-  once Dunbar/Bradley have their accounts.
+1. Supabase → Auth → **URL Configuration** → Site URL =
+   `https://hooslog-william-s-projects-aaa81194.vercel.app`; add it to the
+   redirect allowlist. (It still points at localhost.)
+2. Supabase → Auth → **turn "Confirm email" ON.**
+3. Re-add the coaches:
+   ```sql
+   insert into public.staff_emails (email, note) values
+     ('hfb5af@virginia.edu', 'Coach — Trevor Dunbar'),
+     ('ndt4ve@virginia.edu', 'Coach — Sam Bradley')
+   on conflict (email) do update set note = excluded.note;
+   ```
+4. Have Dunbar and Bradley sign up **immediately** so both addresses are
+   claimed. (Even with confirmation ON, an unclaimed address can still be
+   *squatted* to block the real person — the AFTER INSERT trigger writes the
+   profile row regardless. Claiming early is the belt-and-braces.)
+5. Then remove the test coach: `delete from public.staff_emails where email =
+   'fnh4mv+coach@virginia.edu';` — after 0006 this **actually revokes** access.
 
----
+**Also:** rotate the trial account passwords. The value was in a chat
+transcript and is still in git history (commit 773532e); deleting the line was
+not remediation.
 
-## Task 1 — Closed signup roster (SECURITY) · needs migration + redeploy
+## 📋 Paste this migration (written, tested to build, not yet applied)
 
-**Now:** any `@virginia.edu` email can self-signup as an athlete
-(`handle_new_user()` trigger, `supabase/migrations/0001_initial.sql`).
-**New rule William wants:** ONLY explicitly-listed people can create an account
-at all.
+`supabase/migrations/0006_audit_hardening.sql` — SQL editor → paste → Run.
+- `is_coach()` now requires **current** `staff_emails` membership, so removing
+  a row revokes access (previously it did not — the documented go-live step
+  left the test coach fully privileged).
+- `role` changes are service-role only — a coach can no longer mint coaches or
+  demote the head coach.
+- Athletes lose hard-DELETE on `logs` (app only soft-deletes anyway), so a pain
+  flag the coach already read can't be erased; `created_at` is pinned.
+- Athletes can't soft-delete a week row out from under the coach's comment.
+- `search_path` includes `pg_temp` on SECURITY DEFINER functions.
 
-Plan:
-- New migration `0005_closed_roster.sql`: add an `athlete_emails` allowlist
-  table (mirrors `staff_emails`: `email pk, note, added_at`). Rewrite
-  `handle_new_user()` so signup is **rejected unless** the email is in
-  `staff_emails` ∪ `athlete_emails`; role = `coach` if in `staff_emails`, else
-  `athlete`. Remove the blanket `%@virginia.edu` allowance. New reject message,
-  e.g. `Not on the team roster — ask your coach to add you`.
-- Seed `athlete_emails` with William's roster.
-- `src/app/(auth)/signup/page.tsx` already softens `database error saving new
-  user` into a friendly line — confirm the new rejection still shows nicely;
-  update the wording if needed.
-- No in-app UI to manage the roster; SQL-only is fine for the trial.
-- **Design choice to confirm:** keep `staff_emails` (coaches) + new
-  `athlete_emails` (athletes) [recommended], vs one combined `roster(email,
-  role)` table.
-
-## Task 2 — Coaches = exactly the 2 real coaches · SQL (part of 0005 seed)
-
-- Add the 2 coach emails to `staff_emails`.
-- Remove the placeholder `fnh4mv+coach@virginia.edu` **unless William wants to
-  keep his own coach login** (ask).
-- `staff_emails` decides the role assigned **at signup**; a coach who already
-  signed up keeps their role even if the list changes — set `profiles.role`
-  directly if you ever need to fix an existing account.
-
-## Task 3 — Rename "Aerobic" → "Training run" (TR) · code only, no migration
-
-- `src/lib/types.ts` → `RUN_TYPE_LABELS.aerobic = "Training run"`. That relabels
-  the athlete form chip, the coach drill-in tag, everywhere it renders.
-- Stored DB value stays `'aerobic'` (internal). All run data was wiped, so a
-  true rename (`'aerobic'`→`'training'` via a check-constraint migration) is
-  optional — do it only if the internal name bugs us.
-- **Confirm with William:** should a Training run get a grid mark, or stay
-  unmarked like now? Today `RUN_TYPE_MARKS.aerobic = ""` (unmarked); TR is the
-  everyday baseline run (team dictionary), so unmarked is consistent — but he
-  may want a "TR" mark.
-
-## Task 4 — Delete-a-run to "redo" · ALREADY PARTLY BUILT — confirm scope
-
-- A delete already exists: `deleteLog` (soft-delete) in
-  `src/app/log/actions.ts`, surfaced as a **"Logged the wrong day? Remove this
-  run"** link on any saved run in `src/app/log/day-forms.tsx`.
-- So "delete a run to redo it" already works today: remove it, then log fresh.
-- **Confirm with William what's missing:** likely just reword to "Delete / redo
-  this run" and/or make it more prominent, or a one-tap "redo" (delete + reopen
-  an empty form). Small tweak, not a new build. He may not have seen the
-  existing link.
+Verify block at the bottom should return `1, 0, 1` and only intended coaches.
 
 ---
 
-## Redeploy steps (next session)
+## Still open, ranked (all confirmed by the audit)
 
-1. Make the code changes; `npm run build` must pass (run it before pushing).
-2. New migration: copy the `.sql` → Supabase SQL editor → Run → check the
-   verify query. (William pastes it, or hands off the paste.)
-3. Seed the roster + coach emails via SQL from William's lists.
-4. `git push` → Vercel auto-deploys (~90s). Then verify on the live URL:
-   sign in works, an off-roster email is **blocked** from signing up, the
-   run-type chip reads "Training run", delete/redo behaves as agreed.
-5. Update `CLAUDE.md` status + tick items here.
+### Correctness — do first
+1. **Midnight-ET rollover** (`src/app/log/page.tsx:42`, `src/lib/dates.ts`).
+   A run logged after midnight ET lands on the wrong day, and on Sunday night
+   the wrong *week*. Distance runners log late. Consider an explicit "which day
+   is this for?" affordance rather than only inferring from the clock.
+2. **Week comment last-write-wins** (`src/app/coach/actions.ts:102`). Two
+   coaches (or one stale tab) silently overwrite each other. Needs optimistic
+   concurrency: send the loaded `updated_at`, reject on mismatch, tell the
+   coach to reload. Matters now that there are genuinely two coaches.
+3. **Goal % capped at 100** (`src/app/log/page.tsx:70`) hides over-mileage from
+   both sides — a real injury-risk signal for a distance program.
+4. **`readDate` rolls invalid dates over** (`src/lib/importer.ts:74`) instead of
+   rejecting, unlike `fromISO`. A typed 2026-02-31 becomes March 3.
 
-## Real push notifications (deferred — the "buzz the phone" version)
+### Coach workflow
+5. **Importer refuses the entire week** — workouts included — if any athlete in
+   the Goals tab hasn't signed up yet (`src/app/coach/upload/uploader.tsx:296`).
+   During onboarding that is most weeks. Should post the plan and report the
+   unmatched athletes, or offer "post plan only".
+6. **No handled/answered state on alerts** (`src/lib/queries.ts:303`). Sunday's
+   strip still lists every flag dealt with on Tuesday. Needs a dismiss/handled
+   marker — probably tied to `day_reviews`.
+7. **Importer preview copy is wrong**: says athletes missing from the Goals tab
+   "keep whatever goal they already had" — on a new week they get *no* goal
+   (`src/app/coach/upload/actions.ts:97`).
+8. **No past-week warning on upload** (`src/lib/importer.ts:131`) — the
+   template ships a fixed default date, making that the likeliest coach error.
+9. Coach can't see who hasn't signed up, or who hasn't logged, without reading
+   210 cells.
 
-Shipped now = **in-app** red-dot nudges (only seen when the app is open). To
-actually alert athletes when the app is closed (end-of-day "log your run",
-Sunday deadline), we need real web push. Plan when we do it:
-1. PWA install first — iOS only allows web push for home-screen-installed PWAs
-   (iOS 16.4+). That install is part of the Phase 6 polish below, so do push
-   right after.
-2. Generate VAPID keys → add `NEXT_PUBLIC_VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY`
-   to Vercel env (placeholders already noted in `.env.example`).
-3. Service worker + a "turn on reminders" permission prompt in the athlete UI.
-4. A Vercel Cron job that runs ~evening + Sunday and sends push to athletes who
-   haven't logged. (Optional email fallback via Resend for anyone not installed.)
-Effort: real but bounded. In-app dots cover a lot until then.
+### Athlete UX
+10. **Nothing typed persists until Save** — tapping another day chip or
+    backgrounding the phone discards the entry (`day-forms.tsx:115`).
+11. **Sunday nudge shames new athletes** with an impossible count and a
+    deadline the app doesn't enforce (`src/app/log/page.tsx:78`).
+12. **"Coach sees this today" only appears after opting in** — the killer
+    feature is invisible on day one.
+13. **RPE + run-type chips ~27px** at 390px — below a reliable tap target.
+14. Save sits below four optional fields, off-screen behind the keyboard.
 
-## Not on William's list but worth doing before real athletes (Phase 6)
+### Visual system
+15. Thirteen font sizes, two spellings of the same value, three near-identical
+    weights; the athlete's two screens have different headers; `SignOutButton`
+    ships a layout margin two callers cancel.
+16. Grid rows 41px with no zebra beyond the new odd-row tint — re-check density
+    once there are 30 real athletes.
 
-- Favicon (there's none — `/favicon.ico` 404s), page titles, PWA manifest +
-  icons so it installs to the home screen (also unblocks push above), nicer
-  empty-state screens.
-- **Rotate the trial account passwords.** The password used when the trial
-  accounts were created was written in a chat transcript and was previously
-  committed in this file (removed 2026-08-17; still recoverable from git
-  history, so rotating the credential is the actual fix, not the deletion).
-  Never write a password value in a tracked file — note "rotated" instead.
+### Phase 6 polish (unblocks real push)
+17. Favicon (none — `/favicon.ico` 404s), page titles, PWA manifest + icons so
+    it installs to the home screen.
+
+## Real push notifications (deferred by design)
+
+Shipped = **in-app** red-dot nudges only. To buzz a phone when the app is
+closed: PWA install first (iOS only allows web push for installed PWAs), then
+VAPID keys → `NEXT_PUBLIC_VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` in Vercel, a
+service worker + permission prompt, and a Vercel Cron job for the evening and
+Sunday sends. Optional email fallback via Resend for anyone not installed.
+
+## Don't regress these (locked decisions)
+
+No scores anywhere. No coach response-time metrics. No submit button — every
+save is instantly live to the coach. Backfilling is normal and must never be
+shamed. Orange means pain and nothing else.
