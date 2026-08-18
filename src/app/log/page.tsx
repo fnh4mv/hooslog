@@ -55,6 +55,11 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
 
   const firstName = profile.name.trim().split(" ")[0] || "";
   const loggedDates = new Set(logs.map((l) => l.log_date));
+  // Days the coach wrote back on. Without this the reply is invisible unless
+  // the athlete happens to open that exact day — the return leg of the loop.
+  const repliedDates = new Set(
+    reviews.filter((r) => r.comment?.trim()).map((r) => r.log_date),
+  );
   const selectedIdx = Math.round(
     (selected.getTime() - weekStart.getTime()) / 86_400_000,
   );
@@ -109,6 +114,17 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
         </div>
       </header>
 
+      {/* ---- coach wrote back ---- */}
+      {repliedDates.size > 0 && (
+        <div className="flex items-center gap-2 rounded-2xl border border-green/40 bg-green-soft px-4 py-2.5">
+          <span className="h-2 w-2 flex-none rounded-full bg-green" />
+          <span className="text-[13px] font-bold text-ink">
+            Your coach commented on {repliedDates.size}{" "}
+            {repliedDates.size === 1 ? "day" : "days"} this week — tap the green dots.
+          </span>
+        </div>
+      )}
+
       {/* ---- reminder nudge (end of day / end of week) ---- */}
       {nudge && (
         <Link
@@ -157,6 +173,7 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
           const d = addDays(weekStart, i);
           const dISO = isoDate(d);
           const logged = loggedDates.has(dISO);
+          const replied = repliedDates.has(dISO);
           const isToday = dISO === todayISO;
           const isFuture = dISO > todayISO;
           const isSel = dISO === selectedISO;
@@ -165,8 +182,9 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
               key={dISO}
               href={`/log?week=${weekISO}&day=${dISO}`}
               aria-current={isSel ? "date" : undefined}
+              aria-label={replied ? `${dw} — your coach commented` : undefined}
               className={[
-                "flex flex-1 flex-col items-center gap-0.5 rounded-xl border py-2",
+                "relative flex flex-1 flex-col items-center gap-0.5 rounded-xl border py-2",
                 isToday ? "border-orange bg-orange" : "border-line bg-white",
                 isFuture ? "opacity-50" : "",
                 isSel ? "ring-2 ring-navy ring-offset-1 ring-offset-page" : "",
@@ -174,6 +192,12 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
                 .filter(Boolean)
                 .join(" ")}
             >
+              {replied && (
+                <span
+                  title="Your coach commented"
+                  className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-page bg-green"
+                />
+              )}
               <span
                 className={`text-[10px] font-bold tracking-wider ${
                   isToday ? "text-white/80" : "text-muted"

@@ -220,6 +220,11 @@ export async function getCoachWeek(
   const weekStart = fromISO(weekStartISO);
   if (!weekStart) throw new Error(`getCoachWeek: bad week start "${weekStartISO}"`);
   const weekEndISO = isoDate(addDays(weekStart, 6));
+  // Alerts reach back before the week starts: a pain flag logged Sunday night
+  // belongs to last week, but the coach opens Monday on THIS week and must
+  // still see it. Cells only ever use in-week logs (see the index guard below).
+  const ALERT_LOOKBACK_DAYS = 3;
+  const alertFromISO = isoDate(addDays(weekStart, -ALERT_LOOKBACK_DAYS));
 
   const [rosterRes, weeksRes, logsRes, plansRes] = await Promise.all([
     supabase
@@ -236,7 +241,7 @@ export async function getCoachWeek(
     supabase
       .from("logs")
       .select("*")
-      .gte("log_date", weekStartISO)
+      .gte("log_date", alertFromISO)
       .lte("log_date", weekEndISO)
       .is("deleted_at", null)
       .order("log_date")
@@ -278,7 +283,26 @@ export async function getCoachWeek(
     const day = fromISO(log.log_date);
     if (!day) continue;
     const idx = Math.round((day.getTime() - weekStart.getTime()) / 86_400_000);
-    if (idx < 0 || idx > 6) continue;
+
+    // Out-of-week rows (the alert lookback) contribute alerts only — never
+    // mileage, never a grid cell.
+    if (idx < 0 || idx > 6) {
+      const athleteName = nameById.get(log.athlete_id) as string;
+      if (log.pain_flag) {
+        alerts.push({
+          athleteId: log.athlete_id, athleteName, dateISO: log.log_date,
+          kind: "pain", detail: log.pain_note?.trim() || "no detail given",
+        });
+      }
+      const q = log.question?.trim();
+      if (q) {
+        alerts.push({
+          athleteId: log.athlete_id, athleteName, dateISO: log.log_date,
+          kind: "question", detail: q,
+        });
+      }
+      continue;
+    }
 
     let cells = cellsByAthlete.get(log.athlete_id);
     if (!cells) {

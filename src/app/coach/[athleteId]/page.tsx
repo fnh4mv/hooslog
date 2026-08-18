@@ -209,7 +209,7 @@ export default async function AthleteDrillIn({
                   key={`pain-${l.id}`}
                   className="mt-2.5 rounded-xl border-l-4 border-l-orange bg-orange-soft p-2.5"
                 >
-                  <div className="text-[11px] font-extrabold uppercase tracking-wider text-orange">
+                  <div className="text-[11px] font-extrabold uppercase tracking-wider text-orange-ink">
                     ⚡ Pain flag {l.slot === "PM" ? "(PM run)" : ""}
                   </div>
                   <p className="mt-0.5 text-[13px] leading-snug text-ink">

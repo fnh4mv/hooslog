@@ -87,6 +87,12 @@ export function DayReviewControls({
           onKeyDown={(e) => {
             if (e.key === "Enter" && dirty) save();
           }}
+          // Save on blur: the coach grades 24 of these and then clicks
+          // "Next athlete" — blur fires before that navigation, so typed
+          // feedback can't be lost to a click that leaves the page.
+          onBlur={() => {
+            if (dirty && !busy) save();
+          }}
         />
         {error && <p className="mt-1 text-[13px] font-semibold text-orange">{error}</p>}
       </div>
@@ -162,6 +168,10 @@ export function WeekReviewControls({
         maxLength={2000}
         placeholder="What you'd write at the bottom of the sheet…"
         className={`${INPUT} mt-2 resize-none leading-relaxed`}
+        // Same reason as the per-day comment: don't lose it to "Next athlete".
+        onBlur={() => {
+          if (comment !== (initialComment ?? "") && !busy) save();
+        }}
       />
       {error && <p className="mt-2 text-[13px] font-semibold text-orange">{error}</p>}
 

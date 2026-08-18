@@ -33,10 +33,29 @@ export function DayForms({
   const [showPM, setShowPM] = useState(false);
 
   const nonRun = amLog && amLog.kind !== "run" ? amLog : null;
+  const savedRuns = [amLog?.kind === "run" ? amLog : null, pmLog].filter(Boolean) as Log[];
+  const savedFlag = savedRuns.some((l) => l.pain_flag || l.question);
+
+  /**
+   * Marking a day off/cross replaces the runs saved for it. Warn first — losing
+   * a pain flag or a question to a mis-tap is the worst thing this form can do,
+   * because the coach may already have acted on it.
+   */
+  function changeMode(next: LogKind) {
+    if (next === mode) return;
+    if (next !== "run" && savedRuns.length > 0) {
+      const what = savedRuns.length > 1 ? "the runs you logged" : "the run you logged";
+      const extra = savedFlag
+        ? "\n\nHeads up: that includes something you flagged for your coach."
+        : "";
+      if (!window.confirm(`Marking this an ${next === "off" ? "off day" : "cross-train day"} removes ${what} for this day.${extra}\n\nContinue?`)) return;
+    }
+    setMode(next);
+  }
 
   return (
     <div className="flex flex-col gap-3">
-      <ModePicker mode={mode} onChange={setMode} />
+      <ModePicker mode={mode} onChange={changeMode} />
 
       {mode === "run" ? (
         <>
@@ -54,7 +73,13 @@ export function DayForms({
           )}
         </>
       ) : (
-        <OffDayForm dateISO={dateISO} kind={mode} existing={nonRun} />
+        <OffDayForm
+          dateISO={dateISO}
+          kind={mode}
+          existing={nonRun}
+          replacesRuns={savedRuns.length}
+          replacesFlag={savedFlag}
+        />
       )}
     </div>
   );
@@ -118,9 +143,18 @@ function LogForm({
   const [runType, setRunType] = useState<RunType | null>(existing?.run_type ?? null);
 
   function onSave() {
-    const dist = Number(distance);
-    if (distance.trim() === "" || !Number.isFinite(dist)) {
-      s.setError("Enter your distance in miles.");
+    const blank = distance.trim() === "";
+    // Reporting pain or asking a question must never be blocked by a mileage
+    // field — that's the whole point of the product. Blank distance is allowed
+    // when there's something for the coach; it saves as 0 and still reaches them.
+    const reporting = s.pain || s.question.trim() !== "";
+    const dist = blank && reporting ? 0 : Number(distance);
+    if ((blank && !reporting) || !Number.isFinite(dist)) {
+      s.setError(
+        blank
+          ? "Enter your distance — or flag pain / ask a question and save without it."
+          : "That distance isn't a number.",
+      );
       return;
     }
     s.setError(null);
@@ -306,14 +340,24 @@ function OffDayForm({
   dateISO,
   kind,
   existing,
+  replacesRuns = 0,
+  replacesFlag = false,
 }: {
   dateISO: string;
   kind: Exclude<LogKind, "run">;
   existing: Log | null;
+  replacesRuns?: number;
+  replacesFlag?: boolean;
 }) {
   const s = useDayEntry(existing);
 
   function onSave() {
+    // Second gate: the mode switch warned, but the destructive write happens
+    // here, so confirm against the state that actually exists at save time.
+    if (replacesRuns > 0) {
+      const what = replacesRuns > 1 ? `${replacesRuns} runs` : "the run";
+      if (!window.confirm(`Saving this removes ${what} logged for this day. Continue?`)) return;
+    }
     s.setError(null);
     s.startTransition(async () => {
       let res: Awaited<ReturnType<typeof saveLog>>;
@@ -352,6 +396,14 @@ function OffDayForm({
           ? "Bike, pool, lift — whatever you did instead of running. No mileage counted."
           : "Planned rest. Your coach sees the day was accounted for, not forgotten."}
       </p>
+
+      {replacesRuns > 0 && (
+        <p className="mt-2 rounded-xl bg-orange-soft px-3 py-2 text-[12px] font-bold leading-snug text-orange-ink">
+          Saving this removes {replacesRuns > 1 ? `the ${replacesRuns} runs` : "the run"} you already
+          logged for this day
+          {replacesFlag ? ", including what you flagged for your coach" : ""}.
+        </p>
+      )}
 
       {isCross && (
         <label className="mt-3 block">
@@ -421,7 +473,7 @@ function PainQuestionNotes({
               placeholder="Where and how much? e.g. left achilles, dull after mile 5"
               className={`${INPUT} mt-2 resize-none leading-relaxed`}
             />
-            <span className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-orange-soft px-2.5 py-1.5 text-[11px] font-bold text-orange">
+            <span className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-orange-soft px-2.5 py-1.5 text-[11px] font-bold text-orange-ink">
               ⚡ Coach sees this today
             </span>
           </>

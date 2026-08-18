@@ -125,25 +125,31 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-line bg-white">
             <table className="w-full min-w-[820px] border-collapse">
+              {/* Header sticks to the top: at 30 athletes the coach scrolls
+                  past row 11, and a grid whose day columns have scrolled away
+                  is unreadable. z-30 keeps the corner cell above the sticky
+                  name column (z-20). */}
               <thead>
                 <tr className="border-b border-line">
-                  <th className="sticky left-0 z-10 bg-white px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-muted">
+                  <th className="sticky left-0 top-0 z-30 bg-white px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-muted">
                     Athlete
                   </th>
                   {DOW.map((d, i) => (
                     <th
                       key={d}
-                      className={`px-2 py-2.5 text-center text-[11px] font-bold uppercase tracking-wider ${
-                        dayState(i) === "today" ? "bg-orange-soft text-orange" : "text-muted"
+                      className={`sticky top-0 z-20 px-2 py-2.5 text-center text-[11px] font-bold uppercase tracking-wider ${
+                        dayState(i) === "today"
+                          ? "bg-orange-soft text-orange"
+                          : "bg-white text-muted"
                       }`}
                     >
                       {d}
                     </th>
                   ))}
-                  <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-muted">
+                  <th className="sticky top-0 z-20 bg-white px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-muted">
                     Week
                   </th>
-                  <th className="w-[120px] px-4 py-2.5" />
+                  <th className="sticky top-0 z-20 w-[120px] bg-white px-4 py-2.5" />
                 </tr>
               </thead>
 
@@ -176,13 +182,16 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
                     row.mileageGoal && row.mileageGoal > 0
                       ? Math.min(100, Math.round((row.totalMiles / row.mileageGoal) * 100))
                       : 0;
-                  const behind = row.mileageGoal !== null && pct < 40;
                   return (
                     <tr
                       key={row.athlete.id}
-                      className="border-b border-line last:border-0 hover:bg-navy-soft/50"
+                      className="group border-b border-line bg-white last:border-0 odd:bg-[#FBFCFD] hover:bg-navy-soft"
                     >
-                      <td className="sticky left-0 z-10 bg-inherit px-4 py-2">
+                      {/* Explicit background, never bg-inherit: the <tr> has no
+                          opaque background of its own, so an inheriting sticky
+                          cell is transparent and the mileage scrolls visibly
+                          under the names. group-hover keeps it in step. */}
+                      <td className="sticky left-0 z-20 bg-white px-4 py-2 group-odd:bg-[#FBFCFD] group-hover:bg-navy-soft">
                         <Link
                           href={`/coach/${row.athlete.id}?week=${weekISO}`}
                           className="flex items-baseline gap-2 hover:underline"
@@ -222,14 +231,19 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
                           {row.mileageGoal !== null ? ` / ${row.mileageGoal}` : " mi"}
                         </span>
                       </td>
+                      {/* Bar is always navy. It used to turn orange when under
+                          40% of the goal, which painted the whole roster orange
+                          every Monday — orange has one meaning in this product,
+                          and it is pain. Mid-week "behind" was also just wrong:
+                          it compared week-to-date miles to a full-week goal. */}
                       <td className="px-4 py-2">
                         {row.mileageGoal !== null && (
                           <div
                             className="h-1.5 w-full overflow-hidden rounded-full bg-navy-soft"
-                            title={`${pct}% of goal`}
+                            title={`${pct}% of ${row.mileageGoal} mi goal`}
                           >
                             <div
-                              className={`h-full rounded-full ${behind ? "bg-orange" : "bg-navy"}`}
+                              className="h-full rounded-full bg-navy"
                               style={{ width: `${pct}%` }}
                             />
                           </div>

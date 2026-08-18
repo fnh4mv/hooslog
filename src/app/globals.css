@@ -4,17 +4,31 @@
 @theme {
   --color-navy: #232d4b;
   --color-navy-soft: #edeff5;
-  --color-orange: #e57200;
+  --color-orange: #e57200;      /* UVA orange — brand, large text, fills */
   --color-orange-soft: #fdf1e5;
+  /* Pain text on orange-soft was 2.8:1 — the most important signal in the
+     product was its least readable text. This darker orange hits ~4.6:1 on
+     both white and orange-soft while still reading as UVA orange. */
+  --color-orange-ink: #a34f00;
   --color-ink: #232d4b;
   --color-ink-2: #5c6478;
-  --color-muted: #98a0b0;
+  /* Was #98A0B0 — 2.47:1 on the page background, below WCAG AA for the label
+     layer it carries everywhere. Darkened to ~4.6:1 without losing the
+     "quiet" role it plays against ink/ink-2. */
+  --color-muted: #6e7688;
   --color-line: #e6e8ee;
   --color-green: #2f7d4f;
   --color-green-soft: #eaf4ee;
   --color-red: #e5484d;        /* reminders / overdue — distinct from orange (pain) */
   --color-red-soft: #fdecec;
   --color-page: #f7f8fa;
+}
+
+/* The palette is a deliberate light design (UVA navy on near-white). Declaring
+   this stops Android's Auto Dark Theme from algorithmically inverting it, which
+   turns the orange pain signal into an unreadable mess. */
+:root {
+  color-scheme: light;
 }
 
 body {
