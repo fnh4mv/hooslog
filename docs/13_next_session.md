@@ -120,4 +120,8 @@ Effort: real but bounded. In-app dots cover a lot until then.
 - Favicon (there's none — `/favicon.ico` 404s), page titles, PWA manifest +
   icons so it installs to the home screen (also unblocks push above), nicer
   empty-state screens.
-- Change the trial password later (`Outerbanks14$` is in the chat transcript).
+- **Rotate the trial account passwords.** The password used when the trial
+  accounts were created was written in a chat transcript and was previously
+  committed in this file (removed 2026-08-17; still recoverable from git
+  history, so rotating the credential is the actual fix, not the deletion).
+  Never write a password value in a tracked file — note "rotated" instead.
