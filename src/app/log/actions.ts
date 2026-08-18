@@ -55,9 +55,10 @@ export async function saveLog(input: SaveLogInput): Promise<SaveLogResult> {
     return { ok: false, error: "That isn't a valid kind of day." };
   }
   const isRun = kind === "run";
-  // An off/cross day is one entry for the whole day — always the AM slot. The
-  // "you ran AM and PM" concept only applies to runs.
-  const slot: Slot = isRun ? input.slot : "AM";
+  // An off day is one entry for the whole day — always the AM slot. Runs AND
+  // cross-training are per-slot: a morning run + evening bike is a normal
+  // double, so a PM cross-train keeps the slot it was given.
+  const slot: Slot = kind === "off" ? "AM" : input.slot;
 
   // Off/cross carry no mileage, pace, RPE, or run type — they still carry the
   // pain flag, question, and notes below.
@@ -137,9 +138,11 @@ export async function saveLog(input: SaveLogInput): Promise<SaveLogResult> {
     : await supabase.from("logs").insert(row);
   if (write.error) return { ok: false, error: "Couldn't save — try again." };
 
-  // Marking the day off/cross removes any run in the other slot — a day can't
-  // be both "off" and a PM run. (Runs never touch the other slot.)
-  if (!isRun) {
+  // A day-level entry (an off day, or the "cross-trained today" card — both
+  // land in the AM slot) replaces whatever was in the other slot: a day can't
+  // be "off" and still have an evening run. An evening (PM) cross-train
+  // replaces nothing — it sits alongside the morning run.
+  if (!isRun && slot === "AM") {
     await supabase
       .from("logs")
       .update({ deleted_at: new Date().toISOString() })

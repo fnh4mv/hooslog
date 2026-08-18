@@ -48,6 +48,11 @@ function Cell({ cell, state }: { cell: GridCell; state: "past" | "today" | "futu
           {runMark}
         </sup>
       )}
+      {cell.crossToo && (
+        <span className="ml-0.5 text-[10px] font-bold text-muted" title="Also cross-trained">
+          +XT
+        </span>
+      )}
       {question}
     </span>
   );
@@ -273,6 +278,9 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
           <span>
             <b className="text-ink">off</b> · <b className="text-ink">XT</b> = off day /
             cross-train
+          </span>
+          <span>
+            <b className="text-ink">8.2 +XT</b> = ran + cross-trained
           </span>
           <span>
             <b className="text-orange underline decoration-2 underline-offset-4">orange</b> = pain

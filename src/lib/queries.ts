@@ -159,6 +159,8 @@ export async function getHistory(
  * - kind null + miles null = nothing logged.
  * - kind "run" = miles is the AM+PM sum; runType is the day's hardest run.
  * - kind "off" / "cross" = the day was reported as rest / cross-train (0 miles).
+ * - crossToo = the day ALSO had a cross-train alongside a run (evening bike
+ *   after a morning run) — the run stays the cell's face, this adds a mark.
  */
 export type GridCell = {
   miles: number | null;
@@ -166,6 +168,7 @@ export type GridCell = {
   runType: RunType | null;
   painFlag: boolean;
   hasQuestion: boolean;
+  crossToo: boolean;
 };
 
 // Which run type wins when a day has more than one run: the hardest one is
@@ -295,6 +298,7 @@ export async function getCoachWeek(
       runType: null,
       painFlag: false,
       hasQuestion: false,
+      crossToo: false,
     }));
   const cellsByAthlete = new Map<string, GridCell[]>();
   const nameById = new Map(roster.map((a) => [a.id, fullName(a)]));
@@ -336,11 +340,17 @@ export async function getCoachWeek(
       cellsByAthlete.set(log.athlete_id, cells);
     }
     const cell = cells[idx];
-    // Off/cross is a single entry for the day; a run sums AM+PM. Either kind of
-    // entry can carry the flag or question.
-    if (log.kind === "off" || log.kind === "cross") {
-      cell.kind = log.kind;
+    // Off is a single entry for the day; a run sums AM+PM; a cross-train can
+    // stand alone OR ride alongside a run (evening bike after a morning run) —
+    // a run always stays the cell's face. Any entry can carry the flag or
+    // question.
+    if (log.kind === "off") {
+      cell.kind = "off";
+    } else if (log.kind === "cross") {
+      if (cell.kind === "run") cell.crossToo = true;
+      else cell.kind = "cross";
     } else {
+      if (cell.kind === "cross") cell.crossToo = true;
       cell.kind = "run";
       cell.miles = (cell.miles ?? 0) + Number(log.distance_mi);
       cell.runType = hardestRunType(cell.runType, log.run_type);

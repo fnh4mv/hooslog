@@ -13,8 +13,10 @@ const RUN_TYPES: RunType[] = ["workout", "long", "aerobic"];
 /**
  * The day's entry. A day is one of three things (Ran / Off / Cross-train); the
  * mode picker at the top switches between them. "Ran" shows the run form(s) —
- * AM always, PM revealed by "+ Add PM run" (doubles). Off and cross-train are
- * a light card that still carries a pain flag and a question.
+ * AM always, plus an evening session revealed by "+ Add evening exercise",
+ * which itself can be a run or a cross-train (a morning run + evening bike is
+ * a normal double). Off and day-level cross-train are a light card that still
+ * carries a pain flag and a question.
  *
  * page.tsx keys this by date, so switching days resets everything.
  */
@@ -27,24 +29,27 @@ export function DayForms({
   amLog: Log | null;
   pmLog: Log | null;
 }) {
-  // The AM slot holds either the morning run OR the off/cross entry.
+  // The AM slot holds either the morning run OR the day-level off/cross entry.
   const dayKind: LogKind = amLog && amLog.kind !== "run" ? amLog.kind : "run";
   const [mode, setMode] = useState<LogKind>(dayKind);
   const [showPM, setShowPM] = useState(false);
 
   const nonRun = amLog && amLog.kind !== "run" ? amLog : null;
-  const savedRuns = [amLog?.kind === "run" ? amLog : null, pmLog].filter(Boolean) as Log[];
-  const savedFlag = savedRuns.some((l) => l.pain_flag || l.question);
+  // Everything a day-level card would replace: the AM run plus whatever the
+  // evening holds (a run or a cross-train).
+  const savedSessions = [amLog?.kind === "run" ? amLog : null, pmLog].filter(Boolean) as Log[];
+  const savedFlag = savedSessions.some((l) => l.pain_flag || l.question);
 
   /**
-   * Marking a day off/cross replaces the runs saved for it. Warn first — losing
-   * a pain flag or a question to a mis-tap is the worst thing this form can do,
-   * because the coach may already have acted on it.
+   * Marking a day off/cross replaces the sessions saved for it. Warn first —
+   * losing a pain flag or a question to a mis-tap is the worst thing this form
+   * can do, because the coach may already have acted on it.
    */
   function changeMode(next: LogKind) {
     if (next === mode) return;
-    if (next !== "run" && savedRuns.length > 0) {
-      const what = savedRuns.length > 1 ? "the runs you logged" : "the run you logged";
+    if (next !== "run" && savedSessions.length > 0) {
+      const what =
+        savedSessions.length > 1 ? "the sessions you logged" : "what you logged";
       const extra = savedFlag
         ? "\n\nHeads up: that includes something you flagged for your coach."
         : "";
@@ -61,14 +66,14 @@ export function DayForms({
         <>
           <LogForm dateISO={dateISO} slot="AM" existing={amLog?.kind === "run" ? amLog : null} />
           {pmLog || showPM ? (
-            <LogForm dateISO={dateISO} slot="PM" existing={pmLog} />
+            <EveningEntry dateISO={dateISO} existing={pmLog} />
           ) : (
             <button
               type="button"
               onClick={() => setShowPM(true)}
               className="rounded-2xl border-[1.5px] border-dashed border-[#C9CDD8] bg-white py-3.5 text-sm font-bold text-ink-2"
             >
-              + Add PM run
+              + Add evening exercise
             </button>
           )}
         </>
@@ -77,8 +82,56 @@ export function DayForms({
           dateISO={dateISO}
           kind={mode}
           existing={nonRun}
-          replacesRuns={savedRuns.length}
+          replacesRuns={savedSessions.length}
           replacesFlag={savedFlag}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The evening session: a run or a cross-train, the athlete's choice. Saving
+ * either shape writes the same PM row (the save path upserts by slot), so
+ * switching the picker on a saved entry converts it on the next save.
+ */
+function EveningEntry({ dateISO, existing }: { dateISO: string; existing: Log | null }) {
+  const [kind, setKind] = useState<"run" | "cross">(
+    existing?.kind === "cross" ? "cross" : "run",
+  );
+
+  const btn = (value: "run" | "cross", label: string) => (
+    <button
+      type="button"
+      aria-pressed={kind === value}
+      onClick={() => setKind(value)}
+      className={`flex-1 rounded-lg py-2 text-[12px] font-bold transition-colors ${
+        kind === value ? "bg-navy text-white shadow-sm" : "bg-white text-ink-2"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 rounded-2xl border border-line bg-white p-1.5 pl-3">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
+          Evening
+        </span>
+        {btn("run", "Run")}
+        {btn("cross", "Cross-train")}
+      </div>
+      {kind === "run" ? (
+        <LogForm
+          dateISO={dateISO}
+          slot="PM"
+          existing={existing?.kind === "run" ? existing : null}
+        />
+      ) : (
+        <EveningCrossForm
+          dateISO={dateISO}
+          existing={existing?.kind === "cross" ? existing : null}
         />
       )}
     </div>
@@ -431,6 +484,117 @@ function OffDayForm({
       >
         {s.busy ? "Saving…" : s.saved ? "Saved ✓" : existing ? "Update" : isCross ? "Log cross-train" : "Log off day"}
       </button>
+    </section>
+  );
+}
+
+/**
+ * The evening cross-train card (PM slot). Unlike the day-level card above, it
+ * replaces nothing — it sits alongside the morning run. Same rule as every
+ * entry: no mileage, but pain and questions still reach the coach same-day.
+ */
+function EveningCrossForm({
+  dateISO,
+  existing,
+}: {
+  dateISO: string;
+  existing: Log | null;
+}) {
+  const s = useDayEntry(existing);
+
+  function onSave() {
+    s.setError(null);
+    s.startTransition(async () => {
+      let res: Awaited<ReturnType<typeof saveLog>>;
+      try {
+        res = await saveLog({
+          log_date: dateISO,
+          slot: "PM",
+          kind: "cross",
+          distance_mi: 0,
+          pain_flag: s.pain,
+          pain_note: s.painNote.trim() || undefined,
+          question: s.question.trim() || undefined,
+          notes: s.notes.trim() || undefined,
+        });
+      } catch {
+        res = { ok: false, error: "Couldn't reach the server — check your signal and hit Save again." };
+      }
+      if (!res.ok) {
+        s.setError(res.error);
+        return;
+      }
+      s.setSaved(true);
+      setTimeout(() => s.setSaved(false), 2000);
+      s.router.refresh();
+    });
+  }
+
+  function onDelete() {
+    if (!existing) return;
+    if (!window.confirm("Remove this evening session?")) return;
+    s.setError(null);
+    s.startTransition(async () => {
+      let res: Awaited<ReturnType<typeof deleteLog>>;
+      try {
+        res = await deleteLog(existing.id);
+      } catch {
+        res = { ok: false, error: "Couldn't reach the server — try again." };
+      }
+      if (!res.ok) {
+        s.setError(res.error);
+        return;
+      }
+      s.router.refresh();
+    });
+  }
+
+  return (
+    <section className="rounded-2xl border border-line bg-white p-4">
+      <div className="flex items-center justify-between">
+        <div className="text-[15px] font-bold text-ink">Evening cross-train</div>
+        <span className="rounded-full bg-navy-soft px-2.5 py-1 text-[10px] font-bold tracking-wide text-navy">
+          PM
+        </span>
+      </div>
+      <p className="mt-0.5 text-[13px] text-muted">
+        Bike, pool, lift — no mileage counted. Your morning run stays.
+      </p>
+
+      <label className="mt-3 block">
+        <span className="mb-1 block text-xs font-semibold text-ink-2">
+          What you did <span className="font-normal text-muted">(optional)</span>
+        </span>
+        <input
+          value={s.notes}
+          onChange={(e) => s.setNotes(e.target.value)}
+          placeholder="45 min bike, easy spin"
+          className={INPUT}
+        />
+      </label>
+
+      <PainQuestionNotes s={s} hideNotes />
+
+      {s.error && <p className="mt-3 text-sm font-semibold text-orange">{s.error}</p>}
+
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={s.busy}
+        className="mt-4 w-full rounded-xl bg-navy py-3.5 text-[15px] font-bold text-white shadow-md disabled:opacity-60"
+      >
+        {s.busy ? "Saving…" : s.saved ? "Saved ✓" : existing ? "Update" : "Log cross-train"}
+      </button>
+      {existing && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={s.busy}
+          className="mt-1 w-full py-1.5 text-center text-[12px] font-semibold text-muted underline-offset-2 hover:text-orange hover:underline disabled:opacity-60"
+        >
+          Logged the wrong day? Remove this session
+        </button>
+      )}
     </section>
   );
 }

@@ -13,9 +13,16 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** One entry inside a day card — a run, or an off/cross-train day. */
 function LogLine({ log }: { log: Log }) {
   // Off / cross-train: no mileage line, just what the day was (+ any notes).
+  // A cross-train shows its slot — an evening bike after a morning run reads
+  // as the double it was. Off days are whole-day, so no slot chip.
   if (log.kind === "off" || log.kind === "cross") {
     return (
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        {log.kind === "cross" && (
+          <span className="rounded bg-navy-soft px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider text-navy">
+            {log.slot}
+          </span>
+        )}
         <span className="rounded bg-navy-soft px-2 py-0.5 text-[11px] font-extrabold text-navy">
           {KIND_LABELS[log.kind]}
         </span>
