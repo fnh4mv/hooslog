@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCoachWeek, type GridCell } from "@/lib/queries";
 import { addDays, fromISO, isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
 import { shortName } from "@/lib/names";
-import { RUN_TYPE_MARKS } from "@/lib/types";
+import { RUN_TYPE_LABELS, RUN_TYPE_MARKS } from "@/lib/types";
 import { AlertStrip } from "./alert-strip";
 import { CoachHeader } from "./header";
 
@@ -43,7 +43,7 @@ function Cell({ cell, state }: { cell: GridCell; state: "past" | "today" | "futu
       {runMark && (
         <sup
           className="ml-0.5 font-extrabold text-navy"
-          title={cell.runType === "workout" ? "Workout" : "Long run"}
+          title={cell.runType ? RUN_TYPE_LABELS[cell.runType] : undefined}
         >
           {runMark}
         </sup>
@@ -273,7 +273,8 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
           <span>
             <b className="text-ink">8.2</b>
             <sup className="font-extrabold text-navy">W</sup>/
-            <sup className="font-extrabold text-navy">L</sup> = workout / long run
+            <sup className="font-extrabold text-navy">L</sup>/
+            <sup className="font-extrabold text-navy">M</sup> = workout / long / medium long
           </span>
           <span>
             <b className="text-ink">off</b> · <b className="text-ink">XT</b> = off day /

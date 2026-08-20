@@ -73,7 +73,7 @@ export async function saveLog(input: SaveLogInput): Promise<SaveLogResult> {
       return { ok: false, error: "Distance must be a number between 0 and 40 miles." };
     }
     if (input.run_type != null) {
-      if (!["workout", "long", "aerobic"].includes(input.run_type)) {
+      if (!["workout", "long", "medium", "aerobic"].includes(input.run_type)) {
         return { ok: false, error: "That isn't a valid run type." };
       }
       runType = input.run_type;

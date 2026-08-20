@@ -11,11 +11,14 @@ export type Slot = "AM" | "PM";
 /** What a day was: a run, a planned off day, or a cross-train day (migration 0004). */
 export type LogKind = "run" | "off" | "cross";
 /** Run classification, runs only. Aerobic = the everyday baseline. */
-export type RunType = "workout" | "long" | "aerobic";
+export type RunType = "workout" | "long" | "medium" | "aerobic";
 
 export const RUN_TYPE_LABELS: Record<RunType, string> = {
   workout: "Workout",
   long: "Long run",
+  // Stored value is "medium" (short, like the others); the team says
+  // "medium long" — the in-between distance day (coach request, 0007).
+  medium: "Medium long",
   // Stored value stays "aerobic" (internal); the team calls this a training run
   // (TR) — the everyday baseline run.
   aerobic: "Training run",
@@ -24,6 +27,7 @@ export const RUN_TYPE_LABELS: Record<RunType, string> = {
 export const RUN_TYPE_MARKS: Record<RunType, string> = {
   workout: "W",
   long: "L",
+  medium: "M",
   aerobic: "",
 };
 export const KIND_LABELS: Record<Exclude<LogKind, "run">, string> = {

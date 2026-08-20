@@ -173,7 +173,7 @@ export type GridCell = {
 
 // Which run type wins when a day has more than one run: the hardest one is
 // what a coach scanning the grid most wants to see.
-const RUN_TYPE_RANK: Record<RunType, number> = { workout: 3, long: 2, aerobic: 1 };
+const RUN_TYPE_RANK: Record<RunType, number> = { workout: 4, long: 3, medium: 2, aerobic: 1 };
 function hardestRunType(a: RunType | null, b: RunType | null): RunType | null {
   if (!a) return b;
   if (!b) return a;

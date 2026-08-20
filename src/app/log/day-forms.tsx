@@ -8,7 +8,8 @@ import { RUN_TYPE_LABELS, type Log, type LogKind, type RunType, type Slot } from
 const INPUT =
   "w-full rounded-xl border-[1.5px] border-line bg-white px-3.5 py-3 text-[15px] font-semibold text-ink outline-none placeholder:font-normal placeholder:text-muted focus:border-orange";
 
-const RUN_TYPES: RunType[] = ["workout", "long", "aerobic"];
+// Picker order per the coaches: everyday baseline first, hardest last.
+const RUN_TYPES: RunType[] = ["aerobic", "medium", "long", "workout"];
 
 /**
  * The day's entry. A day is one of three things (Ran / Off / Cross-train); the
@@ -317,14 +318,16 @@ function LogForm({
         <span className="mb-1.5 block text-xs font-semibold text-ink-2">
           Type of run <span className="font-normal text-muted">(optional)</span>
         </span>
-        <div className="flex gap-1.5">
+        {/* 2×2, not one row: four labels as long as "Training run" squeezed
+            into a single row at 390px are unreadable and untappable. */}
+        <div className="grid grid-cols-2 gap-1.5">
           {RUN_TYPES.map((t) => (
             <button
               key={t}
               type="button"
               aria-pressed={runType === t}
               onClick={() => setRunType(runType === t ? null : t)}
-              className={`flex-1 rounded-lg border-[1.5px] py-2 text-[13px] font-bold ${
+              className={`rounded-lg border-[1.5px] py-2.5 text-[13px] font-bold ${
                 runType === t
                   ? "border-navy bg-navy text-white"
                   : "border-line bg-white text-ink-2"
