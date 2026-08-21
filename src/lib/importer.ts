@@ -237,11 +237,43 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
       });
       continue;
     }
-    const goal = typeof rawGoal === "number" ? rawGoal : Number(goalText);
+    // Excel silently converts low ranges like "5-10" into dates the moment
+    // they're typed. Catch that before it reads as a nonsense goal.
+    if (rawGoal instanceof Date) {
+      errors.push({
+        where: `Goals!C${r}`,
+        message: `${name || email}'s goal looks like Excel turned a range into a date. Type it with the word "to" (like 5 to 10), or format the cell as Text first.`,
+      });
+      continue;
+    }
+
+    let goal: number;
+    // Coaches write ranges — "45-49", "45 – 49", "45 to 49". Use the middle
+    // of the range as the single goal number the app tracks, and say so in
+    // the preview rather than silently substituting.
+    const range = /^(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)$/i.exec(goalText);
+    if (range) {
+      const lo = Number(range[1]);
+      const hi = Number(range[2]);
+      if (lo > hi) {
+        errors.push({
+          where: `Goals!C${r}`,
+          message: `"${goalText}" is backwards — put the smaller number first, like ${hi}-${lo}.`,
+        });
+        continue;
+      }
+      goal = (lo + hi) / 2;
+      warnings.push({
+        where: `Goals!C${r}`,
+        message: `${name || email}: "${goalText}" counts as ${Math.round(goal * 10) / 10} (the middle of the range).`,
+      });
+    } else {
+      goal = typeof rawGoal === "number" ? rawGoal : Number(goalText);
+    }
     if (!Number.isFinite(goal)) {
       errors.push({
         where: `Goals!C${r}`,
-        message: `"${goalText}" isn't a number. Weekly goals are miles, like 70.`,
+        message: `"${goalText}" isn't a number. Weekly goals are miles, like 70 — or a range, like 45-49.`,
       });
       continue;
     }
