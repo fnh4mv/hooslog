@@ -1,5 +1,5 @@
 import readXlsxFile from "read-excel-file/node";
-import { isoDate, mondayOf, todayET } from "@/lib/dates";
+import { isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
 
 /**
  * Parser for the coach's week-plan template
@@ -151,13 +151,14 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
       where: "Week Plan!B3",
       message: `${isoDate(weekDate)} is a ${DAYS[(weekDate.getDay() + 6) % 7]}, and weeks start on Monday. Did you mean ${isoDate(monday)}?`,
     });
-  } else if (isoDate(weekDate) < isoDate(mondayOf(todayET()))) {
+  } else if (isoDate(weekDate) < isoDate(mondayOf(trainingTodayET()))) {
     // The template ships with a fixed example date, so posting a week that has
     // already passed is the single likeliest coach mistake. A warning, not an
-    // error — backfilling an old week on purpose stays possible.
+    // error — backfilling an old week on purpose stays possible. Training-day
+    // clock, same as every page: at 1 AM Monday the closing week isn't "past".
     warnings.push({
       where: "Week Plan!B3",
-      message: `${isoDate(weekDate)} is a past week — this week started ${isoDate(mondayOf(todayET()))}. If you're planning the week ahead, fix the Monday date in B3 before posting.`,
+      message: `${isoDate(weekDate)} is a past week — this week started ${isoDate(mondayOf(trainingTodayET()))}. If you're planning the week ahead, fix the Monday date in B3 before posting.`,
     });
   }
 

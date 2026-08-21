@@ -52,6 +52,7 @@ export async function saveDayReview(
       .is("deleted_at", null);
     if (error) return { ok: false, error: "Couldn't save — try again." };
     revalidatePath(`/coach/${athleteId}`);
+    revalidatePath("/coach"); // the grid's alert strip keys off day_reviews
     return { ok: true };
   }
 
@@ -71,6 +72,7 @@ export async function saveDayReview(
   if (error) return { ok: false, error: "Couldn't save — try again." };
 
   revalidatePath(`/coach/${athleteId}`);
+  revalidatePath("/coach"); // ditto: a handled alert must retire from the strip
   return { ok: true };
 }
 

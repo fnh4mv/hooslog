@@ -87,6 +87,22 @@ hard-DELETE on logs; `created_at` pinned; week rows can't be athlete-deleted.
    210 cells. (Signed-up-vs-roster needs coach read access to `athlete_emails`
    — check its RLS before building.)
 
+### Known edges (found in the 2026-08-20 bug sweep; accepted for now)
+2. **Stale-tab wipe:** a day-level Off/Cross save wipes the other slot
+   server-side; the only confirm is client-side from render-time props, so a
+   tab left open since morning can wipe an evening run (pain flag included)
+   without warning. Soft-deleted, so recoverable by hand. Fix = send the
+   client's known session count and reject on mismatch.
+3. **Coach grid on a contradictory day** (off + PM entry, only creatable via
+   older tabs now): the off marker loses to the run/XT in the cell. Athlete
+   side now surfaces the conflict instead of hiding it.
+4. **Uploader on Safari/Firefox:** editing the same file on disk between
+   preview and confirm can post bytes the preview never showed (Chrome errors;
+   others may not). Fix = hash the preview bytes and re-check at commit.
+5. Cosmetics: day-level cross rows show an "AM" chip in the drill-in; the
+   all-handled strip counts prior-week lookback items; ✓ Reviewed badge sits
+   on whichever coach comment renders first.
+
 ### Athlete UX
 2. **Nothing typed persists until Save** — tapping another day chip or
    backgrounding the phone discards the entry (`day-forms.tsx:115`).

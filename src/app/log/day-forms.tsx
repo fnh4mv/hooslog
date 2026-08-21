@@ -31,7 +31,11 @@ export function DayForms({
   pmLog: Log | null;
 }) {
   // The AM slot holds either the morning run OR the day-level off/cross entry.
-  const dayKind: LogKind = amLog && amLog.kind !== "run" ? amLog.kind : "run";
+  // If a PM entry exists alongside a day-level AM row (possible when the
+  // athlete flips to "Ran" and logs only the evening), open in run mode — the
+  // day-level card would HIDE the evening entry, and nothing on this page is
+  // ever allowed to be invisible.
+  const dayKind: LogKind = amLog && amLog.kind !== "run" && !pmLog ? amLog.kind : "run";
   const [mode, setMode] = useState<LogKind>(dayKind);
   const [showPM, setShowPM] = useState(false);
 
@@ -65,6 +69,16 @@ export function DayForms({
 
       {mode === "run" ? (
         <>
+          {/* The AM slot still holds a saved off/cross card — say so rather
+              than letting it linger invisibly behind the empty run form. */}
+          {nonRun && (
+            <div className="rounded-2xl border border-line bg-navy-soft px-4 py-2.5 text-[13px] leading-snug text-ink">
+              This day is still saved as{" "}
+              <b>{nonRun.kind === "off" ? "an off day" : "a cross-train day"}</b>
+              {nonRun.pain_flag ? " (with your pain flag)" : ""} — saving a
+              morning run below replaces that.
+            </div>
+          )}
           <LogForm dateISO={dateISO} slot="AM" existing={amLog?.kind === "run" ? amLog : null} />
           {pmLog || showPM ? (
             <EveningEntry dateISO={dateISO} existing={pmLog} />
