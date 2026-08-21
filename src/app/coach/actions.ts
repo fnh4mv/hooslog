@@ -15,16 +15,65 @@ function cleanText(v: unknown): string | null {
 }
 
 /**
- * The red pen on one day (locked 16): a check, a comment, or both. Unchecking
- * with no comment clears the review entirely rather than leaving an empty row,
- * so the athlete's feedback feed never shows a blank card.
- *
- * No scores, ever (locked 7) — a day is checked or it isn't.
+ * The shared ✓ on one day (locked 16): the team's red-pen check, deliberately
+ * NOT per-coach — either coach checking a day checks it for the program
+ * (locked 7, same reasoning as the week's reviewed stamp). Comments moved to
+ * their own per-coach table in 0009 (saveDayComment below).
  */
-export async function saveDayReview(
+export async function saveDayCheck(
   athleteId: string,
   dateISO: string,
   checked: boolean,
+): Promise<ActionResult> {
+  const auth = await requireCoach();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const { supabase, coachId } = auth;
+
+  if (!UUID.test(String(athleteId))) return { ok: false, error: "Unknown athlete." };
+  const date = fromISO(String(dateISO));
+  if (!date) return { ok: false, error: "That isn't a real date." };
+  const logDate = isoDate(date);
+
+  if (!checked) {
+    // Unchecking clears the row rather than keeping checked=false — the
+    // athlete's feed never shows a blank card. (Any pre-0009 legacy comment
+    // on the row was already copied into day_comments by the migration.)
+    const { error } = await supabase
+      .from("day_reviews")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("athlete_id", athleteId)
+      .eq("log_date", logDate)
+      .is("deleted_at", null);
+    if (error) return { ok: false, error: "Couldn't save — try again." };
+  } else {
+    // unique(athlete_id, log_date) has no deleted_at predicate, so a
+    // previously cleared check is revived by the same upsert.
+    const { error } = await supabase.from("day_reviews").upsert(
+      {
+        athlete_id: athleteId,
+        log_date: logDate,
+        checked: true,
+        coach_id: coachId,
+        deleted_at: null,
+      },
+      { onConflict: "athlete_id,log_date" },
+    );
+    if (error) return { ok: false, error: "Couldn't save — try again." };
+  }
+
+  revalidatePath(`/coach/${athleteId}`);
+  revalidatePath("/coach"); // the grid's alert strip keys off day actions
+  return { ok: true };
+}
+
+/**
+ * One coach's comment on one athlete-day (0009): same per-coach contract as
+ * saveWeekComment — you only ever write your own row, both coaches' comments
+ * show attributed, an empty save clears yours.
+ */
+export async function saveDayComment(
+  athleteId: string,
+  dateISO: string,
   comment: string,
 ): Promise<ActionResult> {
   const auth = await requireCoach();
@@ -41,38 +90,39 @@ export async function saveDayReview(
     return { ok: false, error: `Comment is too long (max ${MAX_TEXT} characters).` };
   }
 
-  // Nothing to say and nothing checked = no review. Soft-delete so the
-  // athlete's card disappears but the history stays.
-  if (!checked && !text) {
+  if (!text) {
     const { error } = await supabase
-      .from("day_reviews")
+      .from("day_comments")
       .update({ deleted_at: new Date().toISOString() })
       .eq("athlete_id", athleteId)
       .eq("log_date", logDate)
+      .eq("coach_id", coachId)
       .is("deleted_at", null);
     if (error) return { ok: false, error: "Couldn't save — try again." };
     revalidatePath(`/coach/${athleteId}`);
-    revalidatePath("/coach"); // the grid's alert strip keys off day_reviews
+    revalidatePath("/coach");
     return { ok: true };
   }
 
-  // unique(athlete_id, log_date) has no deleted_at predicate, so a previously
-  // cleared review is revived by the same upsert rather than colliding.
-  const { error } = await supabase.from("day_reviews").upsert(
+  const { data: me } = await supabase
+    .from("profiles").select("name").eq("id", coachId).single();
+  const coachName = (me?.name as string | undefined)?.trim() || "Coach";
+
+  const { error } = await supabase.from("day_comments").upsert(
     {
       athlete_id: athleteId,
       log_date: logDate,
-      checked,
-      comment: text,
       coach_id: coachId,
+      coach_name: coachName,
+      comment: text,
       deleted_at: null,
     },
-    { onConflict: "athlete_id,log_date" },
+    { onConflict: "athlete_id,log_date,coach_id" },
   );
   if (error) return { ok: false, error: "Couldn't save — try again." };
 
   revalidatePath(`/coach/${athleteId}`);
-  revalidatePath("/coach"); // ditto: a handled alert must retire from the strip
+  revalidatePath("/coach");
   return { ok: true };
 }
 

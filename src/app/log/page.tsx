@@ -55,7 +55,7 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
   const isFutureDay = selectedISO > actualTodayISO;
 
   // ---- data ----
-  const { profile, athleteWeek, plans, logs, reviews, weekComments } = await getWeekData(
+  const { profile, athleteWeek, plans, logs, reviews, weekComments, dayComments } = await getWeekData(
     supabase,
     user.id,
     weekISO,
@@ -65,14 +65,15 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
   const loggedDates = new Set(logs.map((l) => l.log_date));
   // Days the coach wrote back on. Without this the reply is invisible unless
   // the athlete happens to open that exact day — the return leg of the loop.
-  const repliedDates = new Set(
-    reviews.filter((r) => r.comment?.trim()).map((r) => r.log_date),
-  );
+  // Green dots = a coach wrote something on that day (per-coach comments,
+  // 0009). Legacy pre-0009 comments were migrated into day_comments.
+  const repliedDates = new Set(dayComments.map((c) => c.log_date));
   const selectedIdx = Math.round(
     (selected.getTime() - weekStart.getTime()) / 86_400_000,
   );
   const planText = plans.find((p) => p.day === selectedIdx)?.plan_text.trim() ?? "";
   const review = reviews.find((r) => r.log_date === selectedISO) ?? null;
+  const selectedDayComments = dayComments.filter((c) => c.log_date === selectedISO);
   const amLog = logs.find((l) => l.log_date === selectedISO && l.slot === "AM") ?? null;
   const pmLog = logs.find((l) => l.log_date === selectedISO && l.slot === "PM") ?? null;
 
@@ -263,24 +264,33 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
         )}
       </section>
 
-      {/* ---- coach's day review, when there is one (locked 14/16) ---- */}
-      {review && (review.comment || review.checked) && (
+      {/* ---- coaches' day feedback, when there is any (locked 14/16; 0009:
+              each coach's comment shows separately, with their name) ---- */}
+      {(selectedDayComments.length > 0 || review?.checked) && (
         <section className="rounded-2xl border border-line bg-white p-4">
           <div className="text-[11px] font-bold uppercase tracking-wider text-muted">
-            From your coach
+            From your coaches
           </div>
-          <div className="mt-1.5 flex items-start gap-2">
-            {review.checked && (
+          {review?.checked && selectedDayComments.length === 0 && (
+            <div className="mt-1.5 flex items-center gap-2">
               <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-green-soft text-[11px] font-extrabold text-green">
                 ✓
               </span>
-            )}
-            {review.comment ? (
-              <p className="text-sm leading-snug text-ink">{review.comment}</p>
-            ) : (
               <p className="text-sm font-semibold text-green">Checked off</p>
-            )}
-          </div>
+            </div>
+          )}
+          {selectedDayComments.map((c, i) => (
+            <div key={i} className="mt-1.5 flex items-start gap-2">
+              {review?.checked && i === 0 && (
+                <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-green-soft text-[11px] font-extrabold text-green">
+                  ✓
+                </span>
+              )}
+              <p className="text-sm leading-snug text-ink">
+                <span className="font-bold text-navy">{c.coach_name}:</span> {c.comment}
+              </p>
+            </div>
+          ))}
         </section>
       )}
 

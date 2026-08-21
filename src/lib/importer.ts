@@ -227,9 +227,13 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     }
 
     if (!goalText) {
-      errors.push({
+      // A warning, not an error: the pre-filled roster template ships every
+      // athlete's name+email with the mileage column empty, and a coach may
+      // legitimately leave someone blank (injured, not arrived yet). The row
+      // is skipped loudly, never silently.
+      warnings.push({
         where: `Goals!C${r}`,
-        message: `${name || email} has no weekly goal. Put their mileage target in column C.`,
+        message: `${name || email} has no mileage in column C — skipped; they won't get a goal this week.`,
       });
       continue;
     }

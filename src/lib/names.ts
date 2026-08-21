@@ -10,12 +10,14 @@ function parts(p: Named): string[] {
   return p.name.trim().split(/\s+/).filter(Boolean);
 }
 
-/** "J. Alcott" — grid density (docs/mockups/09a). */
+/** "J. Alcott" — first initial + LAST name only, the one athlete-name format
+ *  used everywhere on the coach portal (coach request, 2026-08-21). Middle
+ *  names from signup ("Brenden Michael McMahon") are dropped, not initialed. */
 export function shortName(p: Named): string {
   const n = parts(p);
   if (n.length === 0) return p.email.split("@")[0];
   if (n.length === 1) return n[0];
-  return `${n[0][0]}. ${n.slice(1).join(" ")}`;
+  return `${n[0][0]}. ${n[n.length - 1]}`;
 }
 
 /** "Jack Alcott" — drill-in and alert strip. */

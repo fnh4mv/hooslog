@@ -102,6 +102,20 @@ export type WeekComment = {
   deleted_at: string | null;
 };
 
+/** One coach's comment on one athlete-day (migration 0009) — same per-coach
+ *  shape as WeekComment, one level down. */
+export type DayComment = {
+  id: string;
+  athlete_id: string;
+  log_date: string; // DATE
+  coach_id: string;
+  coach_name: string; // denormalized: athletes can't read coach profiles
+  comment: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
 export type DayReview = {
   id: string;
   athlete_id: string;

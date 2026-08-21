@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCoachAthleteWeek } from "@/lib/queries";
 import { addDays, fmtDayShort, fromISO, isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
-import { fullName } from "@/lib/names";
+import { shortName } from "@/lib/names";
 import { KIND_LABELS, RUN_TYPE_LABELS, type Log } from "@/lib/types";
 import { CoachHeader } from "../header";
 import { DayReviewControls, WeekReviewControls } from "../review-controls";
@@ -95,6 +95,7 @@ export default async function AthleteDrillIn({
     logs,
     reviews,
     weekComments,
+    dayComments,
     prevAthleteId,
     nextAthleteId,
     position,
@@ -136,7 +137,7 @@ export default async function AthleteDrillIn({
               ‹ All athletes
             </Link>
             <h1 className="text-2xl font-extrabold tracking-tight text-navy">
-              {fullName(profile)}
+              {shortName(profile)}
               {profile.status === "injured" && (
                 <span className="ml-2 rounded px-1.5 py-0.5 align-middle text-[10px] font-extrabold uppercase tracking-wider text-orange ring-1 ring-orange/40">
                   injured
@@ -200,6 +201,11 @@ export default async function AthleteDrillIn({
           const planText = plans.find((p) => p.day === i)?.plan_text.trim() ?? "";
           const dayLogs = logs.filter((l) => l.log_date === dISO);
           const review = reviews.find((r) => r.log_date === dISO) ?? null;
+          const dcs = dayComments.filter((c) => c.log_date === dISO);
+          const myDayComment = dcs.find((c) => c.coach_id === coachId)?.comment ?? null;
+          const peerDayComments = dcs
+            .filter((c) => c.coach_id !== coachId)
+            .map((c) => ({ coachName: c.coach_name, comment: c.comment }));
           const painLogs = dayLogs.filter((l) => l.pain_flag);
           const questions = dayLogs.map((l) => l.question?.trim()).filter(Boolean) as string[];
 
@@ -269,7 +275,8 @@ export default async function AthleteDrillIn({
                   athleteId={athleteId}
                   dateISO={dISO}
                   initialChecked={review?.checked ?? false}
-                  initialComment={review?.comment ?? null}
+                  initialComment={myDayComment}
+                  peerComments={peerDayComments}
                 />
               )}
             </section>

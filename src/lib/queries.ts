@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, fromISO, isoDate, mondayOf } from "@/lib/dates";
-import { fullName, rosterKey } from "@/lib/names";
-import type { AthleteWeek, DayReview, Log, LogKind, Profile, RunType, WeekComment, WeekPlan } from "@/lib/types";
+import { rosterKey, shortName } from "@/lib/names";
+import type { AthleteWeek, DayComment, DayReview, Log, LogKind, Profile, RunType, WeekComment, WeekPlan } from "@/lib/types";
 
 export type WeekData = {
   profile: Profile;
@@ -11,6 +11,8 @@ export type WeekData = {
   reviews: DayReview[];
   /** Every coach's comment on this week (0008) — one row per coach. */
   weekComments: WeekComment[];
+  /** Every coach's per-day comments in this week (0009). */
+  dayComments: DayComment[];
 };
 
 /**
@@ -28,7 +30,7 @@ export async function getWeekData(
   if (!weekStart) throw new Error(`getWeekData: bad week start "${weekStartISO}"`);
   const weekEndISO = isoDate(addDays(weekStart, 6));
 
-  const [profileRes, weekRes, plansRes, logsRes, reviewsRes, commentsRes] = await Promise.all([
+  const [profileRes, weekRes, plansRes, logsRes, reviewsRes, commentsRes, dayCommentsRes] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).single(),
     supabase
       .from("athlete_weeks")
@@ -66,6 +68,14 @@ export async function getWeekData(
       .eq("week_start", weekStartISO)
       .is("deleted_at", null)
       .order("created_at"),
+    supabase
+      .from("day_comments")
+      .select("*")
+      .eq("athlete_id", userId)
+      .gte("log_date", weekStartISO)
+      .lte("log_date", weekEndISO)
+      .is("deleted_at", null)
+      .order("created_at"),
   ]);
 
   if (profileRes.error || !profileRes.data) {
@@ -78,9 +88,10 @@ export async function getWeekData(
     plans: (plansRes.data as WeekPlan[] | null) ?? [],
     logs: (logsRes.data as Log[] | null) ?? [],
     reviews: (reviewsRes.data as DayReview[] | null) ?? [],
-    // ?? [] also covers the window before migration 0008 is pasted: the query
-    // errors, comments simply don't render, nothing crashes.
+    // ?? [] also covers the window before migrations 0008/0009 are pasted:
+    // the query errors, comments simply don't render, nothing crashes.
     weekComments: (commentsRes.data as WeekComment[] | null) ?? [],
+    dayComments: (dayCommentsRes.data as DayComment[] | null) ?? [],
   };
 }
 
@@ -244,7 +255,7 @@ export async function getCoachWeek(
   const ALERT_LOOKBACK_DAYS = 3;
   const alertFromISO = isoDate(addDays(weekStart, -ALERT_LOOKBACK_DAYS));
 
-  const [rosterRes, weeksRes, logsRes, plansRes, reviewsRes] = await Promise.all([
+  const [rosterRes, weeksRes, logsRes, plansRes, reviewsRes, dayCommentsRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("*")
@@ -276,26 +287,40 @@ export async function getCoachWeek(
       .gte("log_date", alertFromISO)
       .lte("log_date", weekEndISO)
       .is("deleted_at", null),
+    supabase
+      .from("day_comments")
+      .select("athlete_id, log_date, updated_at")
+      .gte("log_date", alertFromISO)
+      .lte("log_date", weekEndISO)
+      .is("deleted_at", null),
   ]);
 
   const roster = ((rosterRes.data as Profile[] | null) ?? []).sort((a, b) =>
     rosterKey(a).localeCompare(rosterKey(b)),
   );
 
-  // When was each day last reviewed? A live day_review (check or comment)
-  // means the coach acted on that day, so its alerts leave the active strip.
-  // Compared against the log's own updated_at below: an entry edited AFTER
-  // the review — a new pain note, a changed question, even a fixed distance —
-  // brings the alert back rather than hiding behind Tuesday's check-off.
-  const dayReviewedAt = new Map<string, string>();
+  // When did a coach last act on each day — a ✓ (day_reviews) OR a per-coach
+  // day comment (0009)? Either retires the day's alerts from the active
+  // strip. Compared against the log's own updated_at below: an entry edited
+  // AFTER the coach acted — a new pain note, a changed question, even a fixed
+  // distance — brings the alert back rather than hiding behind Tuesday's
+  // check-off.
+  const dayHandledAt = new Map<string, number>();
+  const noteAction = (r: { athlete_id: string; log_date: string; updated_at: string }) => {
+    const key = `${r.athlete_id}|${r.log_date}`;
+    const t = Date.parse(r.updated_at);
+    const prev = dayHandledAt.get(key);
+    if (prev === undefined || t > prev) dayHandledAt.set(key, t);
+  };
   for (const r of (reviewsRes.data as
     | Pick<DayReview, "athlete_id" | "log_date" | "updated_at">[]
-    | null) ?? []) {
-    dayReviewedAt.set(`${r.athlete_id}|${r.log_date}`, r.updated_at);
-  }
+    | null) ?? []) noteAction(r);
+  for (const r of (dayCommentsRes.data as
+    | Pick<DayComment, "athlete_id" | "log_date" | "updated_at">[]
+    | null) ?? []) noteAction(r);
   const isHandled = (log: Log): boolean => {
-    const reviewed = dayReviewedAt.get(`${log.athlete_id}|${log.log_date}`);
-    return reviewed !== undefined && Date.parse(reviewed) >= Date.parse(log.updated_at);
+    const acted = dayHandledAt.get(`${log.athlete_id}|${log.log_date}`);
+    return acted !== undefined && acted >= Date.parse(log.updated_at);
   };
 
   const weekByAthlete = new Map<string, AthleteWeek>();
@@ -313,7 +338,8 @@ export async function getCoachWeek(
       crossToo: false,
     }));
   const cellsByAthlete = new Map<string, GridCell[]>();
-  const nameById = new Map(roster.map((a) => [a.id, fullName(a)]));
+  // shortName ("B. McMahon") — the coach portal's single name format.
+  const nameById = new Map(roster.map((a) => [a.id, shortName(a)]));
   const alerts: Alert[] = [];
 
   for (const log of (logsRes.data as Log[] | null) ?? []) {
