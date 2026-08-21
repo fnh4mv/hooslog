@@ -55,7 +55,7 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
   const isFutureDay = selectedISO > actualTodayISO;
 
   // ---- data ----
-  const { profile, athleteWeek, plans, logs, reviews } = await getWeekData(
+  const { profile, athleteWeek, plans, logs, reviews, weekComments } = await getWeekData(
     supabase,
     user.id,
     weekISO,
@@ -334,7 +334,10 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
           key={`summary-${weekISO}`}
           weekISO={weekISO}
           initialSummary={athleteWeek?.athlete_summary ?? null}
-          coachComment={athleteWeek?.coach_comment ?? null}
+          coachComments={weekComments.map((c) => ({
+            coachName: c.coach_name,
+            comment: c.comment,
+          }))}
           reviewed={Boolean(athleteWeek?.reviewed_at)}
         />
       )}

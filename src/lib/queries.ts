@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, fromISO, isoDate, mondayOf } from "@/lib/dates";
 import { fullName, rosterKey } from "@/lib/names";
-import type { AthleteWeek, DayReview, Log, LogKind, Profile, RunType, WeekPlan } from "@/lib/types";
+import type { AthleteWeek, DayReview, Log, LogKind, Profile, RunType, WeekComment, WeekPlan } from "@/lib/types";
 
 export type WeekData = {
   profile: Profile;
@@ -9,6 +9,8 @@ export type WeekData = {
   plans: WeekPlan[];
   logs: Log[];
   reviews: DayReview[];
+  /** Every coach's comment on this week (0008) — one row per coach. */
+  weekComments: WeekComment[];
 };
 
 /**
@@ -26,7 +28,7 @@ export async function getWeekData(
   if (!weekStart) throw new Error(`getWeekData: bad week start "${weekStartISO}"`);
   const weekEndISO = isoDate(addDays(weekStart, 6));
 
-  const [profileRes, weekRes, plansRes, logsRes, reviewsRes] = await Promise.all([
+  const [profileRes, weekRes, plansRes, logsRes, reviewsRes, commentsRes] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).single(),
     supabase
       .from("athlete_weeks")
@@ -57,6 +59,13 @@ export async function getWeekData(
       .gte("log_date", weekStartISO)
       .lte("log_date", weekEndISO)
       .is("deleted_at", null),
+    supabase
+      .from("week_comments")
+      .select("*")
+      .eq("athlete_id", userId)
+      .eq("week_start", weekStartISO)
+      .is("deleted_at", null)
+      .order("created_at"),
   ]);
 
   if (profileRes.error || !profileRes.data) {
@@ -69,6 +78,9 @@ export async function getWeekData(
     plans: (plansRes.data as WeekPlan[] | null) ?? [],
     logs: (logsRes.data as Log[] | null) ?? [],
     reviews: (reviewsRes.data as DayReview[] | null) ?? [],
+    // ?? [] also covers the window before migration 0008 is pasted: the query
+    // errors, comments simply don't render, nothing crashes.
+    weekComments: (commentsRes.data as WeekComment[] | null) ?? [],
   };
 }
 

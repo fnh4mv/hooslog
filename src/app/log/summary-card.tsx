@@ -9,19 +9,20 @@ const INPUT =
 
 /**
  * The week's SUMMARY box (locked 19): the athlete's Sunday reflection,
- * editable any day of the week. Also surfaces the coach's weekly comment
- * (locked 16) read-only when present. page.tsx keys this by week so
- * navigating weeks resets local state.
+ * editable any day of the week. Also surfaces every coach's weekly comment
+ * (locked 16; per-coach since 0008) read-only when present — with two real
+ * coaches, each comment is attributed so the athlete knows who said what.
+ * page.tsx keys this by week so navigating weeks resets local state.
  */
 export function SummaryCard({
   weekISO,
   initialSummary,
-  coachComment,
+  coachComments,
   reviewed,
 }: {
   weekISO: string;
   initialSummary: string | null;
-  coachComment: string | null;
+  coachComments: { coachName: string; comment: string }[];
   reviewed: boolean;
 }) {
   const router = useRouter();
@@ -72,17 +73,21 @@ export function SummaryCard({
         {busy ? "Saving…" : saved ? "Saved ✓" : initialSummary ? "Update reflection" : "Save reflection"}
       </button>
 
-      {coachComment ? (
-        <div className="mt-4 rounded-xl border-l-4 border-l-orange bg-orange-soft p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-orange">
-              Coach&apos;s comment
-            </span>
-            {reviewed && (
-              <span className="text-[11px] font-extrabold text-green">✓ Reviewed</span>
-            )}
-          </div>
-          <p className="mt-1 text-sm leading-snug text-ink">{coachComment}</p>
+      {coachComments.length > 0 ? (
+        <div className="mt-4 flex flex-col gap-2">
+          {coachComments.map((c, i) => (
+            <div key={i} className="rounded-xl border-l-4 border-l-orange bg-orange-soft p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-orange">
+                  {c.coachName}
+                </span>
+                {reviewed && i === 0 && (
+                  <span className="text-[11px] font-extrabold text-green">✓ Reviewed</span>
+                )}
+              </div>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-snug text-ink">{c.comment}</p>
+            </div>
+          ))}
         </div>
       ) : reviewed ? (
         <p className="mt-3 text-xs font-semibold text-green">✓ Week reviewed by your coach</p>

@@ -88,6 +88,20 @@ export type Log = {
   deleted_at: string | null;
 };
 
+/** One coach's comment on one athlete-week (migration 0008) — each coach has
+ *  their own row, so two coaches never fight over one textbox. */
+export type WeekComment = {
+  id: string;
+  athlete_id: string;
+  week_start: string; // DATE, always a Monday
+  coach_id: string;
+  coach_name: string; // denormalized: athletes can't read coach profiles
+  comment: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
 export type DayReview = {
   id: string;
   athlete_id: string;

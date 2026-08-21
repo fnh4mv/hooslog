@@ -76,6 +76,10 @@ export default async function AthleteDrillIn({
   if (!UUID.test(athleteId)) notFound();
 
   const supabase = await createClient();
+  // Which coach is looking? Splits the week comments into "yours" (editable)
+  // and the other coach's (read-only). The layout already gated the role.
+  const { data: { user } } = await supabase.auth.getUser();
+  const coachId = user?.id ?? "";
   const today = trainingTodayET(); // same 3 AM rollover as the grid
   const todayISO = isoDate(today);
   const currentMonday = mondayOf(today);
@@ -90,10 +94,16 @@ export default async function AthleteDrillIn({
     plans,
     logs,
     reviews,
+    weekComments,
     prevAthleteId,
     nextAthleteId,
     position,
   } = await getCoachAthleteWeek(supabase, athleteId, weekISO).catch(() => notFound());
+
+  const myComment = weekComments.find((c) => c.coach_id === coachId)?.comment ?? null;
+  const peerComments = weekComments
+    .filter((c) => c.coach_id !== coachId)
+    .map((c) => ({ coachName: c.coach_name, comment: c.comment }));
 
   // A coach landing on a coach's id (or a deactivated athlete) gets the roster
   // back rather than an empty week they can't act on.
@@ -282,7 +292,8 @@ export default async function AthleteDrillIn({
           key={`week-${athleteId}-${weekISO}`}
           athleteId={athleteId}
           weekISO={weekISO}
-          initialComment={athleteWeek?.coach_comment ?? null}
+          initialComment={myComment}
+          peerComments={peerComments}
           initialReviewed={Boolean(athleteWeek?.reviewed_at)}
         />
 

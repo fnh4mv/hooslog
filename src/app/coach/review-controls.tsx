@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveDayReview, saveWeekReview, type WeekReviewState } from "./actions";
+import { saveDayReview, saveWeekComment, saveWeekReviewed } from "./actions";
 
 const INPUT =
   "w-full rounded-xl border-[1.5px] border-line bg-white px-3 py-2 text-[14px] font-medium text-ink outline-none placeholder:font-normal placeholder:text-muted focus:border-orange";
@@ -109,60 +109,72 @@ export function DayReviewControls({
   );
 }
 
+/** Another coach's week comment, as shown to the signed-in coach. */
+export type PeerComment = { coachName: string; comment: string };
+
 /**
- * Week-level: the coach's comment on the whole week plus the reviewed stamp
- * (locked 16). "Mark reviewed" saves the comment in the same write, so the
- * coach never loses a typed comment by clicking the wrong button first.
+ * Week-level: this coach's OWN comment on the week (every coach has their own
+ * — locked 16, extended for two real coaches by 0008) plus the shared
+ * reviewed stamp. The other coach's feedback shows read-only above the box,
+ * so Sunday grading is informed, never a fight over one textbox.
  */
 export function WeekReviewControls({
   athleteId,
   weekISO,
   initialComment,
+  peerComments,
   initialReviewed,
 }: {
   athleteId: string;
   weekISO: string;
+  /** The signed-in coach's own saved comment. */
   initialComment: string | null;
+  /** Other coaches' comments on this week, read-only. */
+  peerComments: PeerComment[];
   initialReviewed: boolean;
 }) {
   const router = useRouter();
   const [comment, setComment] = useState(initialComment ?? "");
   const [reviewed, setReviewed] = useState(initialReviewed);
-  // What this tab believes the saved review is — sent with every save so a
-  // stale tab (or the other coach's tab) is rejected instead of silently
-  // overwriting. On a conflict it re-syncs to the server's state, so the next
-  // save is a deliberate, informed replace.
-  const [expected, setExpected] = useState<WeekReviewState>({
-    comment: initialComment,
-    reviewed: initialReviewed,
-  });
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, startTransition] = useTransition();
 
-  function save(nextReviewed = reviewed) {
+  function saveComment() {
     setError(null);
     startTransition(async () => {
-      let res: Awaited<ReturnType<typeof saveWeekReview>>;
+      let res: Awaited<ReturnType<typeof saveWeekComment>>;
       try {
-        res = await saveWeekReview(athleteId, weekISO, comment, nextReviewed, expected);
+        res = await saveWeekComment(athleteId, weekISO, comment);
       } catch {
         res = { ok: false, error: "Couldn't reach the server — check your connection and try again." };
       }
       if (!res.ok) {
         setError(res.error);
-        if (res.current) {
-          setExpected(res.current);
-          // Show the real reviewed state, so saving again can't silently
-          // un-review (or re-review) what the other tab did.
-          setReviewed(res.current.reviewed);
-        }
         return;
       }
-      setExpected(res.saved);
-      setReviewed(res.saved.reviewed);
       setSaved(true);
       setTimeout(() => setSaved(false), 1600);
+      router.refresh();
+    });
+  }
+
+  function toggleReviewed() {
+    const next = !reviewed;
+    setReviewed(next);
+    setError(null);
+    startTransition(async () => {
+      let res: Awaited<ReturnType<typeof saveWeekReviewed>>;
+      try {
+        res = await saveWeekReviewed(athleteId, weekISO, next);
+      } catch {
+        res = { ok: false, error: "Couldn't reach the server — check your connection and try again." };
+      }
+      if (!res.ok) {
+        setError(res.error);
+        setReviewed(!next); // revert — never show a stamp the DB doesn't have
+        return;
+      }
       router.refresh();
     });
   }
@@ -171,21 +183,31 @@ export function WeekReviewControls({
     <section className="rounded-2xl border border-line bg-white p-4">
       <div className="flex items-baseline justify-between">
         <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
-          Your comment on the week
+          Week comments
         </span>
         {reviewed && <span className="text-[11px] font-extrabold text-green">✓ Reviewed</span>}
       </div>
 
+      {peerComments.map((p, i) => (
+        <div key={i} className="mt-2 rounded-xl bg-navy-soft p-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-navy">
+            {p.coachName}
+          </div>
+          <p className="mt-0.5 whitespace-pre-wrap text-sm leading-snug text-ink">{p.comment}</p>
+        </div>
+      ))}
+
+      <span className="mt-3 block text-xs font-semibold text-ink-2">Your comment</span>
       <textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         rows={3}
         maxLength={2000}
         placeholder="What you'd write at the bottom of the sheet…"
-        className={`${INPUT} mt-2 resize-none leading-relaxed`}
+        className={`${INPUT} mt-1 resize-none leading-relaxed`}
         // Same reason as the per-day comment: don't lose it to "Next athlete".
         onBlur={() => {
-          if (comment !== (initialComment ?? "") && !busy) save();
+          if (comment !== (initialComment ?? "") && !busy) saveComment();
         }}
       />
       {error && <p className="mt-2 text-[13px] font-semibold text-orange">{error}</p>}
@@ -193,7 +215,7 @@ export function WeekReviewControls({
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => save()}
+          onClick={saveComment}
           disabled={busy}
           className="flex-1 rounded-xl border-[1.5px] border-line bg-white py-2.5 text-[13px] font-bold text-navy disabled:opacity-60"
         >
@@ -201,7 +223,7 @@ export function WeekReviewControls({
         </button>
         <button
           type="button"
-          onClick={() => save(!reviewed)}
+          onClick={toggleReviewed}
           disabled={busy}
           className={`flex-1 rounded-xl py-2.5 text-[13px] font-bold disabled:opacity-60 ${
             reviewed
