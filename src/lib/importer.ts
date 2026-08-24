@@ -248,11 +248,21 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     }
 
     let goal: number;
-    // Coaches write ranges — "45-49", "45 – 49", "45 to 49". Use the middle
-    // of the range as the single goal number the app tracks, and say so in
-    // the preview rather than silently substituting.
+    // Coaches write minimums — "60+" means at least sixty. Track the floor,
+    // and say so in the preview rather than silently substituting. (A typed
+    // "+60" never reaches here: Excel itself reads that as the number 60.)
+    const plus = /^(\d+(?:\.\d+)?)\s*\+$/.exec(goalText);
+    // And ranges — "45-49", "45 – 49", "45 to 49". Use the middle of the
+    // range as the single goal number the app tracks, same rule: never
+    // substitute silently.
     const range = /^(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)$/i.exec(goalText);
-    if (range) {
+    if (plus) {
+      goal = Number(plus[1]);
+      warnings.push({
+        where: `Goals!C${r}`,
+        message: `${name || email}: "${goalText}" counts as ${Math.round(goal * 10) / 10} — the bar tracks the minimum.`,
+      });
+    } else if (range) {
       const lo = Number(range[1]);
       const hi = Number(range[2]);
       if (lo > hi) {
@@ -273,7 +283,7 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     if (!Number.isFinite(goal)) {
       errors.push({
         where: `Goals!C${r}`,
-        message: `"${goalText}" isn't a number. Weekly goals are miles, like 70 — or a range, like 45-49.`,
+        message: `"${goalText}" isn't a number. Weekly goals are miles — like 70, a range like 45-49, or a minimum like 60+.`,
       });
       continue;
     }
