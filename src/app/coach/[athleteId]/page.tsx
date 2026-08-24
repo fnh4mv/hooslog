@@ -113,6 +113,7 @@ export default async function AthleteDrillIn({
   const totalMiles =
     Math.round(logs.reduce((sum, l) => sum + Number(l.distance_mi), 0) * 10) / 10;
   const goal = athleteWeek?.mileage_goal == null ? null : Number(athleteWeek.mileage_goal);
+  const goalLabel = athleteWeek?.goal_label ?? null; // "55-60" as written (0010)
   // Uncapped (the bar clamps): 112% is exactly what the coach needs to see.
   const pct = goal && goal > 0 ? Math.round((totalMiles / goal) * 100) : 0;
   const daysLogged = new Set(logs.map((l) => l.log_date)).size;
@@ -175,7 +176,7 @@ export default async function AthleteDrillIn({
             <div className="text-[21px] font-extrabold text-navy">
               {totalMiles}
               <span className="ml-1 text-xs font-bold text-muted">
-                {goal !== null ? `of ${goal} mi` : "mi"}
+                {goal !== null ? `of ${goalLabel ?? goal} mi` : "mi"}
               </span>
             </div>
             <div className="text-xs font-bold text-ink-2">

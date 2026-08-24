@@ -77,7 +77,7 @@ export default async function HistoryPage() {
                 <div className="text-[19px] font-extrabold text-navy">
                   {w.totalMiles}
                   <span className="ml-1 text-xs font-bold text-muted">
-                    {w.mileageGoal !== null ? `of ${w.mileageGoal} mi` : "mi"}
+                    {w.mileageGoal !== null ? `of ${w.goalLabel ?? w.mileageGoal} mi` : "mi"}
                   </span>
                 </div>
                 <span className="text-xs font-semibold text-ink-2">

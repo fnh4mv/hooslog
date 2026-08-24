@@ -98,6 +98,7 @@ export async function getWeekData(
 export type HistoryWeek = {
   weekStart: string; // DATE, always a Monday
   mileageGoal: number | null;
+  goalLabel: string | null; // as written ("55-60"); null = show the number
   totalMiles: number; // rounded to 1 decimal
   daysLogged: number; // distinct days with at least one log
   reviewed: boolean; // athlete_weeks.reviewed_at set
@@ -143,7 +144,7 @@ export async function getHistory(
   const entry = (weekStart: string): HistoryWeek => {
     let e = byWeek.get(weekStart);
     if (!e) {
-      e = { weekStart, mileageGoal: null, totalMiles: 0, daysLogged: 0, reviewed: false };
+      e = { weekStart, mileageGoal: null, goalLabel: null, totalMiles: 0, daysLogged: 0, reviewed: false };
       byWeek.set(weekStart, e);
     }
     return e;
@@ -152,6 +153,7 @@ export async function getHistory(
   for (const w of (weeksRes.data as AthleteWeek[] | null) ?? []) {
     const e = entry(w.week_start);
     e.mileageGoal = w.mileage_goal === null ? null : Number(w.mileage_goal);
+    e.goalLabel = w.goal_label ?? null;
     e.reviewed = w.reviewed_at !== null;
   }
   for (const l of (logsRes.data as Log[] | null) ?? []) {
@@ -208,6 +210,8 @@ export type GridRow = {
   cells: GridCell[]; // exactly 7, Monday-first
   totalMiles: number;
   mileageGoal: number | null;
+  /** The goal as the coach wrote it ("55-60"); null = show the number. */
+  goalLabel: string | null;
   reviewed: boolean;
 };
 
@@ -436,6 +440,7 @@ export async function getCoachWeek(
       cells,
       totalMiles: Math.round(total * 10) / 10,
       mileageGoal: week?.mileage_goal == null ? null : Number(week.mileage_goal),
+      goalLabel: week?.goal_label ?? null,
       reviewed: Boolean(week?.reviewed_at),
     };
   });

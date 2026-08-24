@@ -22,7 +22,11 @@ export type ParsedGoal = {
   row: number; // 1-based row in the Goals tab, for error messages
   name: string;
   email: string;
+  /** The tracked number: the value itself, a range's midpoint, a minimum's floor. */
   goal: number;
+  /** The goal as the coach wrote it ("55-60", "60+"); null for a plain number.
+   *  Athletes see this; the bar math uses `goal`. */
+  label: string | null;
 };
 
 export type ParsedTemplate = {
@@ -248,20 +252,17 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     }
 
     let goal: number;
-    // Coaches write minimums — "60+" means at least sixty. Track the floor,
-    // and say so in the preview rather than silently substituting. (A typed
+    let label: string | null = null;
+    // Coaches write minimums — "60+" means at least sixty. Athletes see the
+    // "60+" exactly as written; the bar quietly tracks the floor. (A typed
     // "+60" never reaches here: Excel itself reads that as the number 60.)
     const plus = /^(\d+(?:\.\d+)?)\s*\+$/.exec(goalText);
-    // And ranges — "45-49", "45 – 49", "45 to 49". Use the middle of the
-    // range as the single goal number the app tracks, same rule: never
-    // substitute silently.
+    // And ranges — "45-49", "45 – 49", "45 to 49". Shown as written; the bar
+    // tracks the middle of the range.
     const range = /^(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)$/i.exec(goalText);
     if (plus) {
       goal = Number(plus[1]);
-      warnings.push({
-        where: `Goals!C${r}`,
-        message: `${name || email}: "${goalText}" counts as ${Math.round(goal * 10) / 10} — the bar tracks the minimum.`,
-      });
+      label = goalText;
     } else if (range) {
       const lo = Number(range[1]);
       const hi = Number(range[2]);
@@ -273,10 +274,7 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
         continue;
       }
       goal = (lo + hi) / 2;
-      warnings.push({
-        where: `Goals!C${r}`,
-        message: `${name || email}: "${goalText}" counts as ${Math.round(goal * 10) / 10} (the middle of the range).`,
-      });
+      label = goalText;
     } else {
       goal = typeof rawGoal === "number" ? rawGoal : Number(goalText);
     }
@@ -296,7 +294,7 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     }
 
     seen.set(email, r);
-    goals.push({ row: r, name, email, goal: Math.round(goal * 10) / 10 });
+    goals.push({ row: r, name, email, goal: Math.round(goal * 10) / 10, label });
   }
 
   if (goals.length === 0 && errors.length === 0) {

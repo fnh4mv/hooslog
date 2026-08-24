@@ -11,6 +11,8 @@ export type GoalPreview = {
   name: string;
   email: string;
   goal: number;
+  /** The goal as written ("55-60", "60+"); null for a plain number. */
+  label: string | null;
   /** Name on the matched account, or null when no athlete has that email. */
   matchedName: string | null;
 };
@@ -158,7 +160,7 @@ export async function commitUpload(formData: FormData): Promise<CommitResult> {
   const { data, error } = await supabase.rpc("import_week", {
     p_week_start: weekStartISO,
     p_plans: plans,
-    p_goals: matched.map((g) => ({ email: g.email, goal: g.goal })),
+    p_goals: matched.map((g) => ({ email: g.email, goal: g.goal, label: g.label })),
   });
 
   if (error) {

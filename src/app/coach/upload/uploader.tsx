@@ -273,7 +273,7 @@ export function Uploader() {
                           </span>
                         ) : (
                           <span className="text-[14px] font-extrabold text-navy">
-                            {g.goal}
+                            {g.label ?? g.goal}
                             <span className="ml-0.5 text-[11px] font-bold text-muted">mi</span>
                           </span>
                         )}

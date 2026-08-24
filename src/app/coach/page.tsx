@@ -237,7 +237,9 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
                           {row.totalMiles}
                         </span>
                         <span className="text-[11px] font-semibold text-muted">
-                          {row.mileageGoal !== null ? ` / ${row.mileageGoal}` : " mi"}
+                          {row.mileageGoal !== null
+                            ? ` / ${row.goalLabel ?? row.mileageGoal}`
+                            : " mi"}
                         </span>
                       </td>
                       {/* Bar is always navy. It used to turn orange when under
@@ -249,7 +251,7 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
                         {row.mileageGoal !== null && (
                           <div
                             className="h-1.5 w-full overflow-hidden rounded-full bg-navy-soft"
-                            title={`${pct}% of ${row.mileageGoal} mi goal`}
+                            title={`${pct}% of ${row.goalLabel ?? row.mileageGoal} mi goal`}
                           >
                             <div
                               className="h-full rounded-full bg-navy"

@@ -50,7 +50,8 @@ export type AthleteWeek = {
   id: string;
   athlete_id: string;
   week_start: string; // DATE, always a Monday
-  mileage_goal: number | null; // coach-set weekly goal (locked 18)
+  mileage_goal: number | null; // coach-set weekly goal (locked 18) — the tracked number
+  goal_label: string | null; // the goal AS WRITTEN ("55-60", "60+"); null = plain number (0010)
   athlete_summary: string | null;
   coach_comment: string | null;
   reviewed_at: string | null;

@@ -81,6 +81,8 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
   const totalMiles =
     Math.round(logs.reduce((sum, l) => sum + Number(l.distance_mi), 0) * 10) / 10;
   const goal = athleteWeek?.mileage_goal ?? null;
+  // "55-60" as the coach wrote it; the % math quietly uses the tracked number.
+  const goalLabel = athleteWeek?.goal_label ?? null;
   // Never capped at 100: running past the goal is an injury-risk signal, and
   // hiding it from either side is how it goes unnoticed. Only the bar clamps.
   const pct = goal ? Math.round((totalMiles / Number(goal)) * 100) : 0;
@@ -315,7 +317,7 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
           <div className="text-[21px] font-extrabold text-navy">
             {totalMiles}
             <span className="ml-1 text-xs font-bold text-muted">
-              {goal !== null ? `of ${Number(goal)} mi` : "mi"}
+              {goal !== null ? `of ${goalLabel ?? Number(goal)} mi` : "mi"}
             </span>
           </div>
           <div className="text-xs font-bold text-ink-2">
