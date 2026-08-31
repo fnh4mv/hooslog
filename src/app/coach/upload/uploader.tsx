@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { commitUpload, previewUpload, type UploadPreview } from "./actions";
+import { GROUP_LABELS, GROUP_SHORT } from "@/lib/types";
 import type { ImportError } from "@/lib/importer";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -33,6 +34,8 @@ export function Uploader() {
     weekStartISO: string;
     goalsSet: number;
     skippedEmails: string[];
+    movedToMid: number;
+    movedToDistance: number;
   } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [busy, startTransition] = useTransition();
@@ -89,6 +92,8 @@ export function Uploader() {
         weekStartISO: res.weekStartISO,
         goalsSet: res.goalsSet,
         skippedEmails: res.skippedEmails,
+        movedToMid: res.movedToMid,
+        movedToDistance: res.movedToDistance,
       });
       router.refresh();
     });
@@ -103,6 +108,17 @@ export function Uploader() {
           {prettyWeek(done.weekStartISO)} — {done.goalsSet}{" "}
           {done.goalsSet === 1 ? "goal" : "goals"} set. Athletes see it now.
         </p>
+        {done.movedToMid + done.movedToDistance > 0 && (
+          <p className="mt-1 text-[13px] font-semibold text-ink-2">
+            {[
+              done.movedToMid > 0 && `${done.movedToMid} moved to mid-distance`,
+              done.movedToDistance > 0 && `${done.movedToDistance} moved to distance`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            .
+          </p>
+        )}
         {done.skippedEmails.length > 0 && (
           <p className="mx-auto mt-2 max-w-md text-[13px] leading-snug text-ink-2">
             <b className="text-navy">No goal set</b> for{" "}
@@ -227,22 +243,45 @@ export function Uploader() {
               )}
             </div>
 
-            <ul className="mt-3 divide-y divide-line border-t border-line">
-              {preview.plans.map((p, i) => (
-                <li key={i} className="flex gap-3 py-2">
-                  <span className="w-[86px] flex-none text-[12px] font-bold uppercase tracking-wider text-muted">
-                    {DAYS[i]}
-                  </span>
-                  <span
-                    className={`text-[13px] leading-snug ${
-                      p ? "font-semibold text-ink" : "text-muted"
-                    }`}
-                  >
-                    {p || "no plan"}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            {/* Both schedules side by side, in the same shape as the file —
+                so a coach who pasted the mid-D week into the distance column
+                sees it here rather than on Monday morning. */}
+            <table className="mt-3 w-full border-collapse">
+              <thead>
+                <tr className="border-b border-line">
+                  <th className="w-[86px] py-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-muted" />
+                  <th className="py-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-navy">
+                    {GROUP_LABELS.distance}
+                  </th>
+                  <th className="py-1.5 pl-3 text-left text-[11px] font-bold uppercase tracking-wider text-navy">
+                    {GROUP_LABELS.mid}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {DAYS.map((day, i) => (
+                  <tr key={day}>
+                    <td className="py-2 align-top text-[12px] font-bold uppercase tracking-wider text-muted">
+                      {day}
+                    </td>
+                    <td
+                      className={`py-2 pr-3 align-top text-[13px] leading-snug ${
+                        preview.plansDistance[i] ? "font-semibold text-ink" : "text-muted"
+                      }`}
+                    >
+                      {preview.plansDistance[i] || "no plan"}
+                    </td>
+                    <td
+                      className={`py-2 pl-3 align-top text-[13px] leading-snug ${
+                        preview.plansMid[i] ? "font-semibold text-ink" : "text-muted"
+                      }`}
+                    >
+                      {preview.plansMid[i] || "no plan"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
 
           <section className="rounded-2xl border border-line bg-white p-4">
@@ -271,12 +310,40 @@ export function Uploader() {
                           <span className="text-[12px] font-bold text-orange">
                             no account — row {g.row}
                           </span>
+                        ) : g.goal === null ? (
+                          <span className="text-[12px] font-semibold text-muted">
+                            no mileage
+                          </span>
                         ) : (
                           <span className="text-[14px] font-extrabold text-navy">
                             {g.label ?? g.goal}
                             <span className="ml-0.5 text-[11px] font-bold text-muted">mi</span>
                           </span>
                         )}
+                      </td>
+                      <td className="w-[92px] py-2 pl-2 text-right">
+                        {(() => {
+                          // What this athlete will be running after the post:
+                          // the file's group if it names one, otherwise
+                          // whatever they already are.
+                          const grp = g.group ?? g.currentGroup;
+                          if (!grp) return null;
+                          const moving = g.group !== null && g.currentGroup !== null && g.group !== g.currentGroup;
+                          return (
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                                moving
+                                  ? "bg-orange-soft text-orange ring-1 ring-orange/40"
+                                  : grp === "mid"
+                                    ? "bg-navy-soft text-navy"
+                                    : "text-muted"
+                              }`}
+                              title={moving ? "Moving squad with this upload" : undefined}
+                            >
+                              {GROUP_SHORT[grp]}
+                            </span>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -291,7 +358,43 @@ export function Uploader() {
                 week (unless one was already set for it).
               </p>
             )}
+
+            <p className="mt-3 border-t border-line pt-3 text-[12px] font-semibold text-ink-2">
+              After this posts:{" "}
+              <b className="text-navy">{preview.squadCounts.distance}</b> on
+              distance, <b className="text-navy">{preview.squadCounts.mid}</b> on
+              mid-distance.
+            </p>
           </section>
+
+          {/* A mistyped GROUP cell is otherwise invisible until someone runs
+              the wrong workout for a week. Anyone changing squad is named
+              here, in orange, above the Post button. */}
+          {preview.moves.length > 0 && (
+            <section className="rounded-2xl border border-orange bg-orange-soft p-4">
+              <div className="text-[11px] font-extrabold uppercase tracking-wider text-orange">
+                {preview.moves.length === 1
+                  ? "1 athlete changes schedule"
+                  : `${preview.moves.length} athletes change schedule`}
+              </div>
+              <ul className="mt-2 flex flex-col gap-1">
+                {preview.moves.map((m) => (
+                  <li key={m.name} className="text-[13px] font-semibold leading-snug text-ink">
+                    {m.name}
+                    <span className="mx-1.5 text-muted">·</span>
+                    <span className="text-muted">{GROUP_LABELS[m.from]}</span>
+                    <span className="mx-1.5 font-bold text-orange">→</span>
+                    <span className="font-extrabold text-navy">{GROUP_LABELS[m.to]}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[12px] leading-snug text-ink-2">
+                This sticks — they stay there every week until you change the
+                GROUP cell back. If that isn&apos;t right, fix the Goals tab and
+                re-upload.
+              </p>
+            </section>
+          )}
 
           {preview.warnings.length > 0 && (
             <section className="rounded-2xl border border-line bg-white p-4">

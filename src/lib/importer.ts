@@ -8,8 +8,14 @@ import { isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
  * coach happens to have.
  *
  * Contract:
- *   "Week Plan" tab — B3 = the Monday date, C6:C12 = plan text for Mon…Sun
- *   "Goals"     tab — row 1 headers, rows 2+ = A name, B UVA email, C goal
+ *   "Week Plan" tab — B3 = the Monday date, C6:C12 = DISTANCE plan text for
+ *                     Mon…Sun, D6:D12 = MID-DISTANCE plan text for Mon…Sun
+ *   "Goals"     tab — row 1 headers, rows 2+ = A name, B UVA email, C goal,
+ *                     D training group ("Distance" / "Mid-D"; blank = no change)
+ *
+ * Backward compatible with the v1 template on purpose: a file with no column D
+ * yields seven empty mid-distance plans and a null group on every athlete,
+ * which changes nothing. Coaches holding the old file keep working.
  *
  * Every failure is a plain-English sentence naming the cell. A coach at 9pm on
  * a Sunday should never see a stack trace or the word "undefined".
@@ -18,12 +24,19 @@ import { isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
 export type ImportError = { where: string; message: string };
 export type ImportWarning = { where: string; message: string };
 
+/** Which schedule an athlete runs. null = the file didn't say; leave them
+ *  wherever they already are (locked 25 — a blank cell never resets anyone). */
+export type ParsedGroup = "distance" | "mid" | null;
+
 export type ParsedGoal = {
   row: number; // 1-based row in the Goals tab, for error messages
   name: string;
   email: string;
-  /** The tracked number: the value itself, a range's midpoint, a minimum's floor. */
-  goal: number;
+  /** The group this file puts them in, or null for "don't touch it". */
+  group: ParsedGroup;
+  /** The tracked number: the value itself, a range's midpoint, a minimum's
+   *  floor. null = the row carried a group change but no mileage. */
+  goal: number | null;
   /** The goal as the coach wrote it ("55-60", "60+"); null for a plain number.
    *  Athletes see this; the bar math uses `goal`. */
   label: string | null;
@@ -31,7 +44,10 @@ export type ParsedGoal = {
 
 export type ParsedTemplate = {
   weekStartISO: string; // always a Monday
-  plans: string[]; // exactly 7; index 0 = Monday; "" = no plan that day
+  /** Exactly 7; index 0 = Monday; "" = no plan that day. */
+  plansDistance: string[];
+  /** Exactly 7, same shape. All "" when the file predates the mid-D column. */
+  plansMid: string[];
   goals: ParsedGoal[];
   warnings: ImportWarning[];
 };
@@ -46,6 +62,16 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 const EXAMPLE_EMAIL = "abc1de@virginia.edu";
 const MAX_GOAL = 200; // a 200-mile week would be a world record; anything above is a typo
 const MAX_PLAN_CHARS = 500;
+
+/** What a coach might type in the GROUP column, normalised. The dropdown in
+ *  the template offers "Distance"/"Mid-D"; these are the spellings a coach
+ *  typing freehand actually reaches for. */
+const GROUP_WORDS: Record<string, Exclude<ParsedGroup, null>> = {
+  d: "distance", dist: "distance", distance: "distance", "long distance": "distance",
+  md: "mid", mid: "mid", "mid-d": "mid", "midd": "mid", "mid d": "mid",
+  "mid distance": "mid", "mid-distance": "mid", "middistance": "mid",
+  "middle distance": "mid", "middle": "mid", "mid dist": "mid", "mid-dist": "mid",
+};
 
 type Cell = string | number | boolean | Date | null;
 type Sheet = { sheet: string; data: Cell[][] };
@@ -166,34 +192,51 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     });
   }
 
-  // ---- C6:C12: the seven days ----
-  const plans: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const value = text(cell(planSheet, 6 + i, 3));
-    if (value.length > MAX_PLAN_CHARS) {
-      errors.push({
-        where: `Week Plan!C${6 + i}`,
-        message: `${DAYS[i]}'s plan is ${value.length} characters — keep it under ${MAX_PLAN_CHARS} so it fits on a phone.`,
-      });
+  // ---- C6:C12 and D6:D12: the seven days, twice ----
+  // Two schedules, not one (locked 24): column C is what the distance guys
+  // run, column D is what the mid-distance guys run.
+  const readPlanColumn = (col: number, letter: string): string[] => {
+    const out: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const value = text(cell(planSheet, 6 + i, col));
+      if (value.length > MAX_PLAN_CHARS) {
+        errors.push({
+          where: `Week Plan!${letter}${6 + i}`,
+          message: `${DAYS[i]}'s plan is ${value.length} characters — keep it under ${MAX_PLAN_CHARS} so it fits on a phone.`,
+        });
+      }
+      if (/\(example\b/i.test(value)) {
+        warnings.push({
+          where: `Week Plan!${letter}${6 + i}`,
+          message: `${DAYS[i]} still has the template's example text in it.`,
+        });
+      }
+      out.push(value);
     }
-    if (/\(example\b/i.test(value)) {
-      warnings.push({
-        where: `Week Plan!C${6 + i}`,
-        message: `${DAYS[i]} still has the template's example text in it.`,
-      });
-    }
-    plans.push(value);
-  }
-  if (plans.every((p) => p === "")) {
+    return out;
+  };
+  const plansDistance = readPlanColumn(3, "C");
+  const plansMid = readPlanColumn(4, "D");
+
+  const noDistance = plansDistance.every((p) => p === "");
+  const noMid = plansMid.every((p) => p === "");
+  if (noDistance && noMid) {
+    warnings.push({
+      where: "Week Plan!C6:D12",
+      message: "No workouts filled in — this will post an empty week.",
+    });
+  } else if (noDistance) {
     warnings.push({
       where: "Week Plan!C6:C12",
-      message: "No workouts filled in — this will post an empty week.",
+      message: "The distance column is empty — the distance guys get no workouts this week.",
     });
   }
 
   // ---- Goals tab: one athlete per row from row 2 ----
   const goals: ParsedGoal[] = [];
   const seen = new Map<string, number>();
+  /** Athletes whose mileage cell was blank — summarised into one warning. */
+  const noMileage: string[] = [];
   for (let r = 2; r <= goalSheet.length; r++) {
     const name = text(cell(goalSheet, r, 1));
     const email = text(cell(goalSheet, r, 2)).toLowerCase();
@@ -230,15 +273,38 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
       continue;
     }
 
+    // ---- column D: which schedule this athlete runs ----
+    // Blank is the common case and means "leave him where he is" (locked 25).
+    // A typo is an error, not a guess: silently defaulting "Middle" to
+    // distance would put a mid-D guy on the wrong workouts all week.
+    const groupText = text(cell(goalSheet, r, 4));
+    let group: ParsedGroup = null;
+    if (groupText) {
+      const found = GROUP_WORDS[groupText.toLowerCase().replace(/\s+/g, " ").trim()];
+      if (!found) {
+        errors.push({
+          where: `Goals!D${r}`,
+          message: `"${groupText}" isn't a training group. Use Distance or Mid-D, or leave the cell blank to keep ${name || email} where they are.`,
+        });
+        continue;
+      }
+      group = found;
+    }
+
     if (!goalText) {
-      // A warning, not an error: the pre-filled roster template ships every
-      // athlete's name+email with the mileage column empty, and a coach may
-      // legitimately leave someone blank (injured, not arrived yet). The row
-      // is skipped loudly, never silently.
-      warnings.push({
-        where: `Goals!C${r}`,
-        message: `${name || email} has no mileage in column C — skipped; they won't get a goal this week.`,
-      });
+      // Not an error: the template ships the whole roster with the mileage
+      // column empty, and a coach may legitimately leave someone blank
+      // (injured, not travelling, not arrived yet). Collected and reported as
+      // ONE line below rather than one warning per athlete — a 29-item list
+      // is how a coach learns to ignore this panel, which is exactly when the
+      // warning that matters gets missed.
+      noMileage.push(name || email);
+      // A row with a GROUP but no mileage is still worth keeping, so a coach
+      // can move a guy between squads without inventing a number for him.
+      if (group) {
+        seen.set(email, r);
+        goals.push({ row: r, name, email, goal: null, label: null, group });
+      }
       continue;
     }
     // Excel silently converts low ranges like "5-10" into dates the moment
@@ -294,7 +360,19 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     }
 
     seen.set(email, r);
-    goals.push({ row: r, name, email, goal: Math.round(goal * 10) / 10, label });
+    goals.push({ row: r, name, email, goal: Math.round(goal * 10) / 10, label, group });
+  }
+
+  if (noMileage.length > 0) {
+    const shown = noMileage.slice(0, 8).join(", ");
+    const rest = noMileage.length - 8;
+    warnings.push({
+      where: "Goals!C",
+      message:
+        noMileage.length === 1
+          ? `${shown} has no mileage in column C — no goal for them this week.`
+          : `${noMileage.length} athletes have no mileage in column C — no goal for them this week: ${shown}${rest > 0 ? `, and ${rest} more` : ""}.`,
+    });
   }
 
   if (goals.length === 0 && errors.length === 0) {
@@ -304,13 +382,33 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     });
   }
 
+  // The two halves have to agree. A mid-D roster with an empty mid-D column is
+  // a week where those guys open the app and see nothing — the single most
+  // damaging way this file can be half-filled, and invisible unless we say so.
+  // (previewUpload repeats this check against the athletes already marked mid-D
+  // in the database, which this parser can't see.)
+  const midInFile = goals.filter((g) => g.group === "mid").length;
+  if (midInFile > 0 && noMid) {
+    warnings.push({
+      where: "Week Plan!D6:D12",
+      message: `${midInFile} ${midInFile === 1 ? "athlete is" : "athletes are"} marked Mid-D, but the mid-distance column is empty — they'll see no workouts this week.`,
+    });
+  }
+  if (midInFile === 0 && !noMid) {
+    warnings.push({
+      where: "Goals!D",
+      message: "The mid-distance column has workouts in it, but nobody in this file is marked Mid-D. Anyone already set to Mid-D will still see them.",
+    });
+  }
+
   if (errors.length > 0) return { ok: false, errors };
 
   return {
     ok: true,
     data: {
       weekStartISO: isoDate(weekDate as Date),
-      plans,
+      plansDistance,
+      plansMid,
       goals,
       warnings,
     },

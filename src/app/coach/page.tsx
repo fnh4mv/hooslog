@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getCoachWeek, type GridCell } from "@/lib/queries";
+import { getCoachWeek, type GridCell, type GridRow } from "@/lib/queries";
 import { addDays, fromISO, isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
 import { shortName } from "@/lib/names";
-import { RUN_TYPE_LABELS, RUN_TYPE_MARKS } from "@/lib/types";
+import { GROUP_LABELS, RUN_TYPE_LABELS, RUN_TYPE_MARKS } from "@/lib/types";
 import { AlertStrip } from "./alert-strip";
 import { CoachHeader } from "./header";
 
@@ -58,6 +58,97 @@ function Cell({ cell, state }: { cell: GridCell; state: "past" | "today" | "futu
   );
 }
 
+
+/** One athlete's row. Lifted out of the grid so the two squad sections can
+ *  each render their own roster without duplicating 60 lines of JSX. */
+function AthleteRow({
+  row,
+  weekISO,
+  dayState,
+}: {
+  row: GridRow;
+  weekISO: string;
+  dayState: (i: number) => "past" | "today" | "future";
+}) {
+  // Uncapped — over-goal mileage is a signal, not a rounding artifact.
+  // The bar itself clamps at 100.
+  const pct =
+    row.mileageGoal && row.mileageGoal > 0
+      ? Math.round((row.totalMiles / row.mileageGoal) * 100)
+      : 0;
+  return (
+<tr
+      key={row.athlete.id}
+      className="group border-b border-line bg-white last:border-0 odd:bg-[#FBFCFD] hover:bg-navy-soft"
+    >
+      {/* Explicit background, never bg-inherit: the <tr> has no
+          opaque background of its own, so an inheriting sticky
+          cell is transparent and the mileage scrolls visibly
+          under the names. group-hover keeps it in step. */}
+      <td className="sticky left-0 z-20 bg-white px-4 py-2 group-odd:bg-[#FBFCFD] group-hover:bg-navy-soft">
+        <Link
+          href={`/coach/${row.athlete.id}?week=${weekISO}`}
+          className="flex items-baseline gap-2 hover:underline"
+        >
+          <span className="text-[13px] font-bold text-navy">
+            {shortName(row.athlete)}
+          </span>
+          {row.athlete.status === "injured" && (
+            <span className="rounded px-1 py-px text-[9px] font-extrabold uppercase tracking-wider text-orange ring-1 ring-orange/40">
+              inj
+            </span>
+          )}
+          {row.reviewed && (
+            <span className="text-[10px] font-extrabold text-green" title="Week reviewed">
+              ✓
+            </span>
+          )}
+        </Link>
+      </td>
+
+      {row.cells.map((cell, i) => (
+        <td
+          key={i}
+          className={`px-2 py-2 text-center ${
+            dayState(i) === "today" ? "bg-orange-soft/70" : ""
+          }`}
+        >
+          <Cell cell={cell} state={dayState(i)} />
+        </td>
+      ))}
+
+      <td className="whitespace-nowrap px-3 py-2 text-right">
+        <span className="text-[13px] font-extrabold text-navy">
+          {row.totalMiles}
+        </span>
+        <span className="text-[11px] font-semibold text-muted">
+          {row.mileageGoal !== null
+            ? ` / ${row.goalLabel ?? row.mileageGoal}`
+            : " mi"}
+        </span>
+      </td>
+      {/* Bar is always navy. It used to turn orange when under
+          40% of the goal, which painted the whole roster orange
+          every Monday — orange has one meaning in this product,
+          and it is pain. Mid-week "behind" was also just wrong:
+          it compared week-to-date miles to a full-week goal. */}
+      <td className="px-4 py-2">
+        {row.mileageGoal !== null && (
+          <div
+            className="h-1.5 w-full overflow-hidden rounded-full bg-navy-soft"
+            title={`${pct}% of ${row.goalLabel ?? row.mileageGoal} mi goal`}
+          >
+            <div
+              className="h-full rounded-full bg-navy"
+              style={{ width: `${Math.min(100, pct)}%` }}
+            />
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 /** Coach portal home — the whole team's week on one screen (locked 15, 21). */
 export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
   const sp = await searchParams;
@@ -73,14 +164,15 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
   const weekISO = isoDate(weekStart);
   const isCurrentWeek = weekISO === isoDate(currentMonday);
 
-  const { rows, alerts, plans } = await getCoachWeek(supabase, weekISO);
+  const { rows, squads, alerts } = await getCoachWeek(supabase, weekISO);
+  // Two schedules exist as soon as a second squad has athletes or a plan
+  // (locked 26). Until then the grid looks exactly as it always has.
+  const showSections = squads.length > 1;
 
   const dayState = (i: number): "past" | "today" | "future" => {
     const d = isoDate(addDays(weekStart, i));
     return d === todayISO ? "today" : d < todayISO ? "past" : "future";
   };
-  const planFor = (i: number) => plans.find((p) => p.day === i)?.plan_text.trim() ?? "";
-  const anyPlans = plans.some((p) => p.plan_text.trim());
   const reviewedCount = rows.filter((r) => r.reviewed).length;
 
   // End-of-week reminder: on the weekend, how many athletes with logged data
@@ -160,110 +252,64 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
                 </tr>
               </thead>
 
-              {/* The coach's plan, once, above the roster — every athlete runs
-                  the same week in the trial (schema note on week_plans). */}
-              {anyPlans && (
-                <tbody>
-                  <tr className="border-b border-line bg-navy-soft/60">
-                    <td className="sticky left-0 z-10 bg-navy-soft/60 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-navy">
-                      Plan
-                    </td>
-                    {DOW.map((_, i) => (
+              {squads.map((squad) => (
+                <tbody key={squad.group}>
+                  {/* Section header only when there really are two schedules —
+                      a program running distance alone should see the grid it
+                      has always seen, with no empty second squad. */}
+                  {showSections && (
+                    <tr className="border-y border-line bg-navy">
                       <td
-                        key={i}
-                        className={`max-w-[110px] px-2 py-2 text-center text-[11px] font-semibold leading-tight text-ink-2 ${
-                          dayState(i) === "today" ? "bg-orange-soft/70" : ""
-                        }`}
+                        colSpan={10}
+                        className="px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-white"
                       >
-                        {planFor(i) || <span className="text-muted">—</span>}
+                        {GROUP_LABELS[squad.group]}
+                        <span className="ml-2 font-bold text-white/60">
+                          {squad.rows.length}{" "}
+                          {squad.rows.length === 1 ? "athlete" : "athletes"}
+                        </span>
                       </td>
-                    ))}
-                    <td colSpan={2} />
-                  </tr>
-                </tbody>
-              )}
+                    </tr>
+                  )}
 
-              <tbody>
-                {rows.map((row) => {
-                  // Uncapped — over-goal mileage is a signal, not a rounding
-                  // artifact. The bar itself clamps at 100.
-                  const pct =
-                    row.mileageGoal && row.mileageGoal > 0
-                      ? Math.round((row.totalMiles / row.mileageGoal) * 100)
-                      : 0;
-                  return (
-                    <tr
-                      key={row.athlete.id}
-                      className="group border-b border-line bg-white last:border-0 odd:bg-[#FBFCFD] hover:bg-navy-soft"
-                    >
-                      {/* Explicit background, never bg-inherit: the <tr> has no
-                          opaque background of its own, so an inheriting sticky
-                          cell is transparent and the mileage scrolls visibly
-                          under the names. group-hover keeps it in step. */}
-                      <td className="sticky left-0 z-20 bg-white px-4 py-2 group-odd:bg-[#FBFCFD] group-hover:bg-navy-soft">
-                        <Link
-                          href={`/coach/${row.athlete.id}?week=${weekISO}`}
-                          className="flex items-baseline gap-2 hover:underline"
-                        >
-                          <span className="text-[13px] font-bold text-navy">
-                            {shortName(row.athlete)}
-                          </span>
-                          {row.athlete.status === "injured" && (
-                            <span className="rounded px-1 py-px text-[9px] font-extrabold uppercase tracking-wider text-orange ring-1 ring-orange/40">
-                              inj
-                            </span>
-                          )}
-                          {row.reviewed && (
-                            <span className="text-[10px] font-extrabold text-green" title="Week reviewed">
-                              ✓
-                            </span>
-                          )}
-                        </Link>
+                  {squad.hasPlans && (
+                    <tr className="border-b border-line bg-navy-soft/60">
+                      <td className="sticky left-0 z-10 bg-navy-soft/60 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-navy">
+                        Plan
                       </td>
-
-                      {row.cells.map((cell, i) => (
+                      {DOW.map((_, i) => (
                         <td
                           key={i}
-                          className={`px-2 py-2 text-center ${
+                          className={`max-w-[110px] px-2 py-2 text-center text-[11px] font-semibold leading-tight text-ink-2 ${
                             dayState(i) === "today" ? "bg-orange-soft/70" : ""
                           }`}
                         >
-                          <Cell cell={cell} state={dayState(i)} />
+                          {squad.plans[i]?.trim() || <span className="text-muted">—</span>}
                         </td>
                       ))}
+                      <td colSpan={2} />
+                    </tr>
+                  )}
 
-                      <td className="whitespace-nowrap px-3 py-2 text-right">
-                        <span className="text-[13px] font-extrabold text-navy">
-                          {row.totalMiles}
-                        </span>
-                        <span className="text-[11px] font-semibold text-muted">
-                          {row.mileageGoal !== null
-                            ? ` / ${row.goalLabel ?? row.mileageGoal}`
-                            : " mi"}
-                        </span>
-                      </td>
-                      {/* Bar is always navy. It used to turn orange when under
-                          40% of the goal, which painted the whole roster orange
-                          every Monday — orange has one meaning in this product,
-                          and it is pain. Mid-week "behind" was also just wrong:
-                          it compared week-to-date miles to a full-week goal. */}
-                      <td className="px-4 py-2">
-                        {row.mileageGoal !== null && (
-                          <div
-                            className="h-1.5 w-full overflow-hidden rounded-full bg-navy-soft"
-                            title={`${pct}% of ${row.goalLabel ?? row.mileageGoal} mi goal`}
-                          >
-                            <div
-                              className="h-full rounded-full bg-navy"
-                              style={{ width: `${Math.min(100, pct)}%` }}
-                            />
-                          </div>
-                        )}
+                  {squad.rows.map((row) => (
+                    <AthleteRow
+                      key={row.athlete.id}
+                      row={row}
+                      weekISO={weekISO}
+                      dayState={dayState}
+                    />
+                  ))}
+
+                  {squad.rows.length === 0 && (
+                    <tr className="border-b border-line bg-white">
+                      <td colSpan={10} className="px-4 py-3 text-[12px] text-muted">
+                        Nobody is on the {GROUP_LABELS[squad.group].toLowerCase()} schedule
+                        yet — set their group in the Goals tab of the week file.
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
+                  )}
+                </tbody>
+              ))}
             </table>
           </div>
         )}

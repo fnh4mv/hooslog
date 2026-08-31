@@ -8,6 +8,22 @@ export type Role = "athlete" | "coach";
 export type AthleteStatus = "active" | "injured" | "inactive" | "alum";
 export type Slot = "AM" | "PM";
 
+/** Which of the two schedules an athlete runs (migration 0011, locked 24-27).
+ *  Everyone still gets a weekly mileage number — the group only decides which
+ *  workout column they see. */
+export type TrainingGroup = "distance" | "mid";
+
+export const GROUP_LABELS: Record<TrainingGroup, string> = {
+  distance: "Distance",
+  mid: "Mid-distance",
+};
+/** Short form for dense surfaces (grid section headers, chips). */
+export const GROUP_SHORT: Record<TrainingGroup, string> = {
+  distance: "Distance",
+  mid: "Mid-D",
+};
+export const GROUPS: TrainingGroup[] = ["distance", "mid"];
+
 /** What a day was: a run, a planned off day, or a cross-train day (migration 0004). */
 export type LogKind = "run" | "off" | "cross";
 /** Run classification, runs only. Aerobic = the everyday baseline. */
@@ -41,6 +57,7 @@ export type Profile = {
   email: string;
   role: Role;
   status: AthleteStatus;
+  training_group: TrainingGroup; // migration 0011; defaults to 'distance'
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -63,6 +80,7 @@ export type AthleteWeek = {
 export type WeekPlan = {
   id: string;
   week_start: string; // DATE, always a Monday
+  training_group: TrainingGroup; // migration 0011 — one plan per group per day
   day: number; // 0 = Monday … 6 = Sunday
   plan_text: string;
   created_at: string;

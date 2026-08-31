@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, fromISO, isoDate, mondayOf } from "@/lib/dates";
 import { rosterKey, shortName } from "@/lib/names";
-import type { AthleteWeek, DayComment, DayReview, Log, LogKind, Profile, RunType, WeekComment, WeekPlan } from "@/lib/types";
+import { GROUPS } from "@/lib/types";
+import type { AthleteWeek, DayComment, DayReview, Log, LogKind, Profile, RunType, TrainingGroup, WeekComment, WeekPlan } from "@/lib/types";
 
 export type WeekData = {
   profile: Profile;
   athleteWeek: AthleteWeek | null;
+  /** Only the plans for this athlete's own training group (0011). */
   plans: WeekPlan[];
   logs: Log[];
   reviews: DayReview[];
@@ -82,10 +84,22 @@ export async function getWeekData(
     throw new Error("getWeekData: profile not found");
   }
 
+  const profile = profileRes.data as Profile;
+  // Both groups' plans come back in one query (14 rows at most) and are
+  // filtered here rather than in a second round trip that would have to wait
+  // on the profile. `?? "distance"` covers the window before 0011 is applied:
+  // the column doesn't exist yet, every plan row is the distance week, and the
+  // athlete still sees it instead of an empty week.
+  const group: TrainingGroup = profile.training_group ?? "distance";
+  const allPlans = (plansRes.data as WeekPlan[] | null) ?? [];
+  const plans = allPlans.some((p) => p.training_group)
+    ? allPlans.filter((p) => (p.training_group ?? "distance") === group)
+    : allPlans;
+
   return {
-    profile: profileRes.data as Profile,
+    profile,
     athleteWeek: (weekRes.data as AthleteWeek | null) ?? null,
-    plans: (plansRes.data as WeekPlan[] | null) ?? [],
+    plans,
     logs: (logsRes.data as Log[] | null) ?? [],
     reviews: (reviewsRes.data as DayReview[] | null) ?? [],
     // ?? [] also covers the window before migrations 0008/0009 are pasted:
@@ -213,6 +227,7 @@ export type GridRow = {
   /** The goal as the coach wrote it ("55-60"); null = show the number. */
   goalLabel: string | null;
   reviewed: boolean;
+  group: TrainingGroup;
 };
 
 /** A pain flag or a question — the things the coach must not miss (locked 15). */
@@ -227,10 +242,23 @@ export type Alert = {
   handled: boolean;
 };
 
-export type CoachWeek = {
+/** One squad's slice of the week: its roster and its own seven-day plan. */
+export type CoachSquad = {
+  group: TrainingGroup;
   rows: GridRow[];
+  /** Exactly 7, Monday-first; "" = no plan that day. */
+  plans: string[];
+  hasPlans: boolean;
+};
+
+export type CoachWeek = {
+  /** Every athlete, both squads — for counts and the review nudge. */
+  rows: GridRow[];
+  /** The roster split by training group (0011, locked 26). Distance first.
+   *  A squad with no athletes AND no plan is omitted, so a program that never
+   *  uses mid-distance never sees an empty second section. */
+  squads: CoachSquad[];
   alerts: Alert[]; // newest first
-  plans: WeekPlan[];
 };
 
 /** Roster scope: who appears in the grid. Alums and inactives drop off. */
@@ -442,6 +470,8 @@ export async function getCoachWeek(
       mileageGoal: week?.mileage_goal == null ? null : Number(week.mileage_goal),
       goalLabel: week?.goal_label ?? null,
       reviewed: Boolean(week?.reviewed_at),
+      // ?? "distance" also covers the window before 0011 is applied.
+      group: athlete.training_group ?? "distance",
     };
   });
 
@@ -454,7 +484,28 @@ export async function getCoachWeek(
     return a.athleteName.localeCompare(b.athleteName);
   });
 
-  return { rows, alerts, plans: (plansRes.data as WeekPlan[] | null) ?? [] };
+  // Split the week's plan rows by group into two Monday-first arrays.
+  const planText: Record<TrainingGroup, string[]> = {
+    distance: Array.from({ length: 7 }, () => ""),
+    mid: Array.from({ length: 7 }, () => ""),
+  };
+  for (const p of (plansRes.data as WeekPlan[] | null) ?? []) {
+    if (p.day < 0 || p.day > 6) continue;
+    planText[(p.training_group ?? "distance") as TrainingGroup][p.day] = p.plan_text ?? "";
+  }
+
+  const squads: CoachSquad[] = GROUPS.map((group) => {
+    const squadRows = rows.filter((r) => r.group === group);
+    const plans = planText[group];
+    return {
+      group,
+      rows: squadRows,
+      plans,
+      hasPlans: plans.some((t) => t.trim()),
+    };
+  }).filter((s, i) => i === 0 || s.rows.length > 0 || s.hasPlans);
+
+  return { rows, squads, alerts };
 }
 
 type RosterEntry = { id: string; name: string; email: string };

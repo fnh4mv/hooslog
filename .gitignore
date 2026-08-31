@@ -43,3 +43,10 @@ next-env.d.ts
 # env — real values never committed (template stays)
 !.env.example
 ~$*
+
+# Superseded scratch copies from the 0011 two-group rework (2026-08-31).
+# The canonical template is docs/templates/hooslog_week_plan_template.xlsx.
+docs/templates/*_v2*.xlsx
+docs/templates/preview/
+.commit-msg-0011.txt
+.0011-two-training-groups.patch

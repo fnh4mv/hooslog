@@ -22,9 +22,10 @@ export default function UploadPage() {
           </Link>
           <h1 className="text-2xl font-extrabold tracking-tight text-navy">Post a week</h1>
           <p className="mt-1 text-[14px] leading-snug text-ink-2">
-            Fill in the template — the Monday date, each day&apos;s workout, and every
-            athlete&apos;s mileage goal — then drop it here. You&apos;ll see exactly what it
-            says before anything posts.
+            Fill in the template — the Monday date, each day&apos;s workout for
+            both schedules, and every athlete&apos;s mileage goal and group — then drop
+            it here. You&apos;ll see exactly what it says, including anyone changing
+            schedule, before anything posts.
           </p>
         </div>
 

@@ -21,10 +21,11 @@ Next.js 16 (App Router, TypeScript) PWA on Vercel · Supabase (Postgres, Auth, R
 | `CLAUDE.md` | **Start here.** Status log, locked decisions (numbered), open items, conventions |
 | `docs/01–05` | Concept, product spec + gap analysis, coach proposal, adversarial pressure test, athlete one-pager |
 | `docs/08` | Infrastructure scope: stack, costs, what we deliberately don't need, build order |
+| `docs/16` | Two training groups (distance + mid-distance): the reworked week file, schema, build order |
 | `docs/11` | Dictionary — team vocabulary (TR, LR, fartlek notation…) and product terms; also the plan-importer's parsing vocabulary |
 | `docs/mockups/` | Athlete portal mockups (06), interactive demo (07 — throwaway, never grows into the app), coach portal grid-vs-cards (09), and the real paper sheet photo (10 — ground truth) |
 | `.env.example` | Environment template. Copy to `.env.local`, fill locally, never commit real values |
 
 ## Principles that don't move
 
-Group-based plan authoring. PWA, no app stores. No Garmin/Strava sync promises (`.FIT` upload is the Phase-2 bridge). No coach response-time metrics, ever. No scores in grading — checkmarks and comments. One-click CSV export of everything at all times: worst case is always "export and go back to paper," and lock-in stays at zero. Pilot runs with paper in parallel; paper retires when the coach says so, not before.
+Group-based plan authoring — two schedules, distance and mid-distance, one upload. PWA, no app stores. No Garmin/Strava sync promises (`.FIT` upload is the Phase-2 bridge). No coach response-time metrics, ever. No scores in grading — checkmarks and comments. One-click CSV export of everything at all times: worst case is always "export and go back to paper," and lock-in stays at zero. Pilot runs with paper in parallel; paper retires when the coach says so, not before.
