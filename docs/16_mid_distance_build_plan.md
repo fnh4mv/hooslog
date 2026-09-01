@@ -55,8 +55,10 @@ and would have failed every upload with "row 33 has no email." Counters live in 
   Goals entries gain `"group": "distance"|"mid"|null`; null = leave the athlete's group
   alone. Upserts 7 rows per group. Still one transaction, still `security invoker`
   (coach RLS + the guard trigger's `is_coach()` early-return authorize the profile write).
-  **Leave the v3 3-arg function in place** so a deploy that lands before the paste keeps
-  working; drop it in a later cleanup.
+  The v3 3-arg function is **redefined as a shim** that posts its single plan as the
+  distance week and leaves groups alone. It could not simply be left alone: re-keying
+  `week_plans` removes the `(week_start, day)` constraint its `ON CONFLICT` targeted, so
+  the untouched body starts raising the moment 0011 runs.
 
 ### 2. `src/lib/importer.ts`
 - `plansDistance` = `C6:C12`, `plansMid` = `D6:D12`.
@@ -110,3 +112,14 @@ and would have failed every upload with "row 33 has no email." Counters live in 
 - **Left for William:** paste `0011`; delete the stale
   `docs/templates/hooslog_week_plan_template_v2.xlsx` and `docs/templates/preview/`
   scratch copies from disk (gitignored, never committed — the mount denies deletes).
+
+- **Verified against a real Postgres 16, not by reading.** All eleven migrations replay
+  clean on a virgin database; 0011 is idempotent; `import_week` v4 writes 7 distance +
+  7 mid plan rows, sets goals, and reports squad moves only when a group actually
+  changes. Atomicity holds: an unknown email rolls the plans back too (0 rows written).
+  Attack suite: an athlete can no longer PATCH their own `training_group` or `role`, and
+  can still change their own display name.
+- **Bug this caught:** the first draft of 0011 claimed the v3 3-arg function would keep
+  working for a deployment that landed before the paste. It would not have — re-keying
+  `week_plans` breaks v3's `ON CONFLICT` immediately. v3 is now a shim that delegates to
+  v4 with an empty mid array, so that claim is true rather than merely written down.

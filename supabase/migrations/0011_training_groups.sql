@@ -41,7 +41,7 @@ do $$ begin
   alter table public.week_plans
     add constraint week_plans_week_group_day_key
     unique (week_start, training_group, day);
-exception when duplicate_table | duplicate_object then null; end $$;
+exception when duplicate_table or duplicate_object then null; end $$;
 
 -- ==================== 3. close the squad-switching hole ====================
 -- 0003 added this guard because RLS is row-level, not column-level: an athlete
@@ -65,9 +65,16 @@ end $$;
 
 -- ==================== 4. import_week v4 ====================
 -- New signature: two plan arrays instead of one, and goals entries may carry
--- "group". The v3 3-arg function is deliberately LEFT IN PLACE so a deploy
--- that lands before this migration is pasted keeps importing distance weeks
--- instead of hard-failing; drop it in a later cleanup once v4 is live.
+-- "group".
+--
+-- The v3 3-arg function is kept as a compatibility shim, but it CANNOT be left
+-- untouched: re-keying week_plans above removes the (week_start, day)
+-- constraint its ON CONFLICT targets, so the old body starts raising
+-- "no unique or exclusion constraint matching the ON CONFLICT specification"
+-- the moment this migration runs. It is redefined below to post a
+-- distance-only week through the new key, so a deployment still running the
+-- old code (a Vercel rollback, a preview branch) keeps working correctly
+-- instead of failing cryptically.
 --
 -- Still one transaction (docs/12 Phase 4 — no partial writes), still
 -- security invoker: RLS applies as the calling coach, and the guard trigger
@@ -178,6 +185,33 @@ end $$;
 revoke all on function public.import_week(date, text[], text[], jsonb) from public;
 grant execute on function public.import_week(date, text[], text[], jsonb) to authenticated;
 
+
+-- ==================== 5. v3 compatibility shim ====================
+-- Same 3-arg signature the pre-0011 code calls. Posts the single plan it is
+-- given as the DISTANCE week and leaves every athlete's group alone, which is
+-- exactly what that code meant before two schedules existed. Delegates to v4
+-- so there is only one implementation to keep correct.
+create or replace function public.import_week(
+  p_week_start date,
+  p_plans      text[],
+  p_goals      jsonb
+)
+returns table (goals_set int, unknown_emails text[])
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_mid text[] := array_fill(''::text, array[7]);
+begin
+  return query
+    select v4.goals_set, v4.unknown_emails
+      from public.import_week(p_week_start, p_plans, v_mid, p_goals) as v4;
+end $$;
+
+revoke all on function public.import_week(date, text[], jsonb) from public;
+grant execute on function public.import_week(date, text[], jsonb) to authenticated;
+
 -- ==================== verify ====================
 select
   (select count(*) from information_schema.columns
@@ -193,5 +227,7 @@ select
   position('training_group' in pg_get_functiondef(
     'public.guard_profile_columns()'::regprocedure)) > 0               as guard_ok,
   position('p_plans_mid' in pg_get_functiondef(
-    'public.import_week(date, text[], text[], jsonb)'::regprocedure)) > 0 as import_v4_ok;
--- Expect: 1, 1, 1, 0, true, true.
+    'public.import_week(date, text[], text[], jsonb)'::regprocedure)) > 0 as import_v4_ok,
+  position('array_fill' in pg_get_functiondef(
+    'public.import_week(date, text[], jsonb)'::regprocedure)) > 0        as v3_shim_ok;
+-- Expect: 1, 1, 1, 0, true, true, true.

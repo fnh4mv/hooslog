@@ -645,6 +645,17 @@ function PainQuestionNotes({
             />
           </button>
         </div>
+
+        {/* The promise, stated BEFORE the toggle is flipped. This used to live
+            inside `s.pain &&`, which meant the one thing this whole product
+            exists for was invisible to anyone deciding whether it was worth
+            using. Deliberately NOT orange: orange means pain and nothing else
+            (locked 7/16), and a standing orange line on a healthy day would
+            spend that signal for nothing. */}
+        <p className="mt-1 text-[11px] leading-snug text-muted">
+          Flag it and your coach sees it today, not Sunday.
+        </p>
+
         {s.pain && (
           <>
             <textarea
@@ -654,8 +665,10 @@ function PainQuestionNotes({
               placeholder="Where and how much? e.g. left achilles, dull after mile 5"
               className={`${INPUT} mt-2 resize-none leading-relaxed`}
             />
+            {/* Now a receipt, not the promise — different words on purpose, so
+                the two lines don't read as the same sentence twice. */}
             <span className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-orange-soft px-2.5 py-1.5 text-[11px] font-bold text-orange-ink">
-              ⚡ Coach sees this today
+              ⚡ Flagged — your coach sees this today
             </span>
           </>
         )}
@@ -669,6 +682,13 @@ function PainQuestionNotes({
           placeholder="Flats or spikes for Saturday?"
           className={INPUT}
         />
+        {/* Same defect as the pain flag: nobody could tell what happens to
+            what they type. Says plainly that this rides with the weekly
+            review, so an urgent question goes to text instead (locked 16) —
+            without implying any deadline on the coach. */}
+        <span className="mt-1 block text-[11px] leading-snug text-muted">
+          Goes to your coach with this week. Text him if it&apos;s urgent.
+        </span>
       </label>
 
       {!hideNotes && (

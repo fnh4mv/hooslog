@@ -22,6 +22,7 @@ Next.js 16 (App Router, TypeScript) PWA on Vercel · Supabase (Postgres, Auth, R
 | `docs/01–05` | Concept, product spec + gap analysis, coach proposal, adversarial pressure test, athlete one-pager |
 | `docs/08` | Infrastructure scope: stack, costs, what we deliberately don't need, build order |
 | `docs/16` | Two training groups (distance + mid-distance): the reworked week file, schema, build order |
+| `docs/18` | Backlog: the next five improvements, ranked against the Oct 1 adoption gates |
 | `docs/11` | Dictionary — team vocabulary (TR, LR, fartlek notation…) and product terms; also the plan-importer's parsing vocabulary |
 | `docs/mockups/` | Athlete portal mockups (06), interactive demo (07 — throwaway, never grows into the app), coach portal grid-vs-cards (09), and the real paper sheet photo (10 — ground truth) |
 | `.env.example` | Environment template. Copy to `.env.local`, fill locally, never commit real values |
