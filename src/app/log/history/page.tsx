@@ -84,6 +84,11 @@ export default async function HistoryPage() {
                   <b className="text-navy">{w.daysLogged} of 7</b> days logged
                 </span>
               </div>
+              {w.longRunGoal !== null && (
+                <div className="mt-1 text-[11px] font-semibold text-muted">
+                  Long run goal {w.longRunLabel ?? w.longRunGoal} mi
+                </div>
+              )}
             </Link>
           );
         })

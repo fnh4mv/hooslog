@@ -286,7 +286,7 @@ export function Uploader() {
 
           <section className="rounded-2xl border border-line bg-white p-4">
             <div className="text-[11px] font-bold uppercase tracking-wider text-muted">
-              Mileage goals — {preview.goals.length}{" "}
+              Goals — {preview.goals.length}{" "}
               {preview.goals.length === 1 ? "athlete" : "athletes"}
             </div>
 
@@ -310,15 +310,24 @@ export function Uploader() {
                           <span className="text-[12px] font-bold text-orange">
                             no account — row {g.row}
                           </span>
-                        ) : g.goal === null ? (
-                          <span className="text-[12px] font-semibold text-muted">
-                            no mileage
-                          </span>
                         ) : (
-                          <span className="text-[14px] font-extrabold text-navy">
-                            {g.label ?? g.goal}
-                            <span className="ml-0.5 text-[11px] font-bold text-muted">mi</span>
-                          </span>
+                          <>
+                            {g.goal === null ? (
+                              <span className="text-[12px] font-semibold text-muted">
+                                no mileage
+                              </span>
+                            ) : (
+                              <span className="text-[14px] font-extrabold text-navy">
+                                {g.label ?? g.goal}
+                                <span className="ml-0.5 text-[11px] font-bold text-muted">mi</span>
+                              </span>
+                            )}
+                            {g.longRun !== null && (
+                              <div className="text-[11px] font-semibold leading-tight text-muted">
+                                long run {g.longRunLabel ?? g.longRun} mi
+                              </div>
+                            )}
+                          </>
                         )}
                       </td>
                       <td className="w-[92px] py-2 pl-2 text-right">

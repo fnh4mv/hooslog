@@ -113,6 +113,8 @@ export type HistoryWeek = {
   weekStart: string; // DATE, always a Monday
   mileageGoal: number | null;
   goalLabel: string | null; // as written ("55-60"); null = show the number
+  longRunGoal: number | null; // the week's long run target (0012); null = none set
+  longRunLabel: string | null; // as written ("14-16"); null = show the number
   totalMiles: number; // rounded to 1 decimal
   daysLogged: number; // distinct days with at least one log
   reviewed: boolean; // athlete_weeks.reviewed_at set
@@ -158,7 +160,16 @@ export async function getHistory(
   const entry = (weekStart: string): HistoryWeek => {
     let e = byWeek.get(weekStart);
     if (!e) {
-      e = { weekStart, mileageGoal: null, goalLabel: null, totalMiles: 0, daysLogged: 0, reviewed: false };
+      e = {
+        weekStart,
+        mileageGoal: null,
+        goalLabel: null,
+        longRunGoal: null,
+        longRunLabel: null,
+        totalMiles: 0,
+        daysLogged: 0,
+        reviewed: false,
+      };
       byWeek.set(weekStart, e);
     }
     return e;
@@ -168,6 +179,10 @@ export async function getHistory(
     const e = entry(w.week_start);
     e.mileageGoal = w.mileage_goal === null ? null : Number(w.mileage_goal);
     e.goalLabel = w.goal_label ?? null;
+    // ?? null also covers the window before 0012 is applied: the column simply
+    // isn't in the row yet, and nothing renders.
+    e.longRunGoal = w.long_run_goal == null ? null : Number(w.long_run_goal);
+    e.longRunLabel = w.long_run_label ?? null;
     e.reviewed = w.reviewed_at !== null;
   }
   for (const l of (logsRes.data as Log[] | null) ?? []) {
@@ -226,6 +241,10 @@ export type GridRow = {
   mileageGoal: number | null;
   /** The goal as the coach wrote it ("55-60"); null = show the number. */
   goalLabel: string | null;
+  /** The week's long run target (0012); null = the coach didn't set one. */
+  longRunGoal: number | null;
+  /** The long run as written ("14-16"); null = show the number. */
+  longRunLabel: string | null;
   reviewed: boolean;
   group: TrainingGroup;
 };
@@ -469,6 +488,9 @@ export async function getCoachWeek(
       totalMiles: Math.round(total * 10) / 10,
       mileageGoal: week?.mileage_goal == null ? null : Number(week.mileage_goal),
       goalLabel: week?.goal_label ?? null,
+      // ?? null also covers the window before 0012 is applied.
+      longRunGoal: week?.long_run_goal == null ? null : Number(week.long_run_goal),
+      longRunLabel: week?.long_run_label ?? null,
       reviewed: Boolean(week?.reviewed_at),
       // ?? "distance" also covers the window before 0011 is applied.
       group: athlete.training_group ?? "distance",

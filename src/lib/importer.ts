@@ -10,12 +10,17 @@ import { isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
  * Contract:
  *   "Week Plan" tab — B3 = the Monday date, C6:C12 = DISTANCE plan text for
  *                     Mon…Sun, D6:D12 = MID-DISTANCE plan text for Mon…Sun
- *   "Goals"     tab — row 1 headers, rows 2+ = A name, B UVA email, C goal,
- *                     D training group ("Distance" / "Mid-D"; blank = no change)
+ *   "Goals"     tab — row 1 headers, rows 2+ = one athlete each. Columns are
+ *                     located by HEADER TEXT, not position: ATHLETE NAME, UVA
+ *                     EMAIL, WEEKLY GOAL, LONG RUN, GROUP ("Distance" /
+ *                     "Mid-D"; blank = no change).
  *
- * Backward compatible with the v1 template on purpose: a file with no column D
- * yields seven empty mid-distance plans and a null group on every athlete,
- * which changes nothing. Coaches holding the old file keep working.
+ * Backward compatible with every older template on purpose. The v1 file has no
+ * mid-distance plan column (seven empty mid plans) and no GROUP column (a null
+ * group on every athlete, so nobody moves). The v2 file has GROUP in column D
+ * and no LONG RUN column — reading columns by position would take "Mid-D" for
+ * a long run distance, which is exactly why the header lookup exists. Coaches
+ * holding an old file keep working; they just get no long run.
  *
  * Every failure is a plain-English sentence naming the cell. A coach at 9pm on
  * a Sunday should never see a stack trace or the word "undefined".
@@ -40,6 +45,13 @@ export type ParsedGoal = {
   /** The goal as the coach wrote it ("55-60", "60+"); null for a plain number.
    *  Athletes see this; the bar math uses `goal`. */
   label: string | null;
+  /** How long that week's long run should be, same tracked-number rule as
+   *  `goal`. null = no long run set for this athlete this week — either the
+   *  cell was blank or the file predates the column. */
+  longRun: number | null;
+  /** The long run as the coach wrote it ("14-16", "16+"); null for a plain
+   *  number. Display-only, like `label` (locked 28). */
+  longRunLabel: string | null;
 };
 
 export type ParsedTemplate = {
@@ -61,6 +73,10 @@ const GOALS_TAB = "goals";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const EXAMPLE_EMAIL = "abc1de@virginia.edu";
 const MAX_GOAL = 200; // a 200-mile week would be a world record; anything above is a typo
+// Matches the per-log cap in migration 0003 and the column check in 0012. It is
+// deliberately loose: the realistic mistake is the WEEKLY number typed into the
+// long run cell (65), and 40 catches that while never blocking a real long run.
+const MAX_LONG_RUN = 40;
 const MAX_PLAN_CHARS = 500;
 
 /** What a coach might type in the GROUP column, normalised. The dropdown in
@@ -119,6 +135,132 @@ function readDate(v: Cell): Date | null {
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
   if (m) return realDate(Number(m[3]), Number(m[1]), Number(m[2]));
   return null;
+}
+
+/** A spreadsheet column letter from a 1-based index. The Goals tab is five
+ *  columns wide, so single letters are all this ever needs. */
+function colLetter(n: number): string {
+  return String.fromCharCode(64 + n);
+}
+
+/**
+ * Where each field lives on the Goals tab, 1-based; null = this file doesn't
+ * have that column at all.
+ *
+ * Matched by HEADER TEXT rather than fixed position. LONG RUN was inserted at
+ * column D on 2026-09-07 and pushed GROUP to E; a coach still holding the
+ * previous file would otherwise have "Mid-D" read as a long run distance and
+ * every row rejected. Anything the header row doesn't name falls back to the
+ * original layout, so a file whose header row was deleted parses as it always
+ * did.
+ */
+type GoalColumns = {
+  name: number;
+  email: number;
+  goal: number;
+  longRun: number | null;
+  group: number | null;
+};
+
+function locateGoalColumns(goalSheet: Cell[][]): GoalColumns {
+  const header = goalSheet[0] ?? [];
+  const found: Record<keyof GoalColumns, number | null> = {
+    name: null, email: null, goal: null, longRun: null, group: null,
+  };
+  header.forEach((h, i) => {
+    const s = text(h).toLowerCase();
+    if (!s) return;
+    const col = i + 1;
+    // Order matters: "LONG RUN (MILES)" and "WEEKLY GOAL (MILES)" both say
+    // "miles", so long run has to claim its column first.
+    if (found.name === null && /name/.test(s)) found.name = col;
+    else if (found.email === null && /e-?mail/.test(s)) found.email = col;
+    else if (found.longRun === null && /long\s*-?\s*run/.test(s)) found.longRun = col;
+    else if (found.goal === null && /weekly|mileage|miles|goal/.test(s)) found.goal = col;
+    else if (found.group === null && /group|squad/.test(s)) found.group = col;
+  });
+  return {
+    name: found.name ?? 1,
+    email: found.email ?? 2,
+    goal: found.goal ?? 3,
+    longRun: found.longRun,
+    group: found.group,
+  };
+}
+
+type MileageCell =
+  | { ok: true; value: number; label: string | null }
+  | { ok: false; message: string };
+
+/**
+ * Reads one of the two mileage cells. A coach writes these three ways and all
+ * three have to survive: a plain number (58), a range (55-60, 55 to 60), or a
+ * minimum (60+). Returns the tracked number — the value, a range's midpoint, a
+ * minimum's floor — plus the text as written, which is what athletes see
+ * (0010). null means the cell was blank, which is never an error here.
+ */
+function readMileage(
+  raw: Cell,
+  who: string,
+  what: "weekly goal" | "long run",
+  max: number,
+): MileageCell | null {
+  const s = text(raw);
+  if (!s) return null;
+
+  // Excel silently converts low ranges like "5-10" into dates the moment
+  // they're typed. Catch that before it reads as a nonsense number.
+  if (raw instanceof Date) {
+    return {
+      ok: false,
+      message: `${who}'s ${what} looks like Excel turned a range into a date. Type it with the word "to" (like 5 to 10), or format the cell as Text first.`,
+    };
+  }
+
+  let value: number;
+  let label: string | null = null;
+  // Minimums — "60+" means at least sixty. Shown as written; the bar quietly
+  // tracks the floor. (A typed "+60" never reaches here: Excel itself reads
+  // that as the number 60.)
+  const plus = /^(\d+(?:\.\d+)?)\s*\+$/.exec(s);
+  // And ranges — "45-49", "45 – 49", "45 to 49". Shown as written; the bar
+  // tracks the middle.
+  const range = /^(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)$/i.exec(s);
+  if (plus) {
+    value = Number(plus[1]);
+    label = s;
+  } else if (range) {
+    const lo = Number(range[1]);
+    const hi = Number(range[2]);
+    if (lo > hi) {
+      return {
+        ok: false,
+        message: `"${s}" is backwards — put the smaller number first, like ${hi}-${lo}.`,
+      };
+    }
+    value = (lo + hi) / 2;
+    label = s;
+  } else {
+    value = typeof raw === "number" ? raw : Number(s);
+  }
+
+  if (!Number.isFinite(value)) {
+    const examples =
+      what === "weekly goal"
+        ? "like 70, a range like 45-49, or a minimum like 60+"
+        : "like 14, a range like 14-16, or a minimum like 16+";
+    return {
+      ok: false,
+      message: `"${s}" isn't a number. ${what === "weekly goal" ? "Weekly goals" : "Long runs"} are miles — ${examples}.`,
+    };
+  }
+  if (value <= 0 || value > max) {
+    return {
+      ok: false,
+      message: `A ${what} of ${value} miles isn't right — it should be between 1 and ${max}.`,
+    };
+  }
+  return { ok: true, value: Math.round(value * 10) / 10, label };
 }
 
 /** Parse the uploaded workbook. Never throws — a bad file comes back as errors. */
@@ -233,17 +375,32 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
   }
 
   // ---- Goals tab: one athlete per row from row 2 ----
+  const cols = locateGoalColumns(goalSheet);
+  if (cols.longRun === null) {
+    warnings.push({
+      where: "Goals!row 1",
+      message:
+        "This file has no LONG RUN column, so nobody gets a long run target this week. It's an older copy of the week file — download the current one below and the column is there, right next to the weekly mileage.",
+    });
+  }
+
   const goals: ParsedGoal[] = [];
   const seen = new Map<string, number>();
-  /** Athletes whose mileage cell was blank — summarised into one warning. */
+  /** Athletes whose weekly mileage cell was blank — summarised into one warning. */
   const noMileage: string[] = [];
+  /** Long run longer than the whole week's mileage — impossible, so it is a
+   *  typo, and it gets one collapsed warning rather than one per athlete. */
+  const longerThanWeek: string[] = [];
   for (let r = 2; r <= goalSheet.length; r++) {
-    const name = text(cell(goalSheet, r, 1));
-    const email = text(cell(goalSheet, r, 2)).toLowerCase();
-    const rawGoal = cell(goalSheet, r, 3);
+    const name = text(cell(goalSheet, r, cols.name));
+    const email = text(cell(goalSheet, r, cols.email)).toLowerCase();
+    const rawGoal = cell(goalSheet, r, cols.goal);
     const goalText = text(rawGoal);
+    const rawLong = cols.longRun === null ? null : cell(goalSheet, r, cols.longRun);
+    const groupText = cols.group === null ? "" : text(cell(goalSheet, r, cols.group));
 
-    if (!name && !email && !goalText) continue; // blank row, skip quietly
+    // blank row, skip quietly
+    if (!name && !email && !goalText && !text(rawLong) && !groupText) continue;
 
     if (email === EXAMPLE_EMAIL) {
       errors.push({
@@ -255,35 +412,37 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
 
     if (!email) {
       errors.push({
-        where: `Goals!B${r}`,
+        where: `Goals!${colLetter(cols.email)}${r}`,
         message: `Row ${r} has no email${name ? ` (${name})` : ""}. The email is how the upload finds the athlete.`,
       });
       continue;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.push({ where: `Goals!B${r}`, message: `"${email}" isn't a valid email address.` });
+      errors.push({
+        where: `Goals!${colLetter(cols.email)}${r}`,
+        message: `"${email}" isn't a valid email address.`,
+      });
       continue;
     }
     const dupe = seen.get(email);
     if (dupe) {
       errors.push({
-        where: `Goals!B${r}`,
+        where: `Goals!${colLetter(cols.email)}${r}`,
         message: `${email} appears twice (rows ${dupe} and ${r}). Keep one row per athlete.`,
       });
       continue;
     }
 
-    // ---- column D: which schedule this athlete runs ----
+    // ---- the GROUP column: which schedule this athlete runs ----
     // Blank is the common case and means "leave him where he is" (locked 25).
     // A typo is an error, not a guess: silently defaulting "Middle" to
     // distance would put a mid-D guy on the wrong workouts all week.
-    const groupText = text(cell(goalSheet, r, 4));
     let group: ParsedGroup = null;
     if (groupText) {
       const found = GROUP_WORDS[groupText.toLowerCase().replace(/\s+/g, " ").trim()];
       if (!found) {
         errors.push({
-          where: `Goals!D${r}`,
+          where: `Goals!${colLetter(cols.group as number)}${r}`,
           message: `"${groupText}" isn't a training group. Use Distance or Mid-D, or leave the cell blank to keep ${name || email} where they are.`,
         });
         continue;
@@ -291,7 +450,27 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
       group = found;
     }
 
-    if (!goalText) {
+    // ---- the two mileage cells ----
+    // Independent of each other on purpose (locked 28): a blank weekly cell no
+    // longer means "skip this athlete", it means "leave his weekly number
+    // alone", and the same for a blank long run. That is what lets the coach
+    // fill in only one of the two columns without wiping the other.
+    const weekly = readMileage(rawGoal, name || email, "weekly goal", MAX_GOAL);
+    if (weekly && !weekly.ok) {
+      errors.push({ where: `Goals!${colLetter(cols.goal)}${r}`, message: weekly.message });
+      continue;
+    }
+    const long =
+      rawLong === null ? null : readMileage(rawLong, name || email, "long run", MAX_LONG_RUN);
+    if (long && !long.ok) {
+      errors.push({
+        where: `Goals!${colLetter(cols.longRun as number)}${r}`,
+        message: long.message,
+      });
+      continue;
+    }
+
+    if (!weekly) {
       // Not an error: the template ships the whole roster with the mileage
       // column empty, and a coach may legitimately leave someone blank
       // (injured, not travelling, not arrived yet). Collected and reported as
@@ -299,79 +478,53 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
       // is how a coach learns to ignore this panel, which is exactly when the
       // warning that matters gets missed.
       noMileage.push(name || email);
-      // A row with a GROUP but no mileage is still worth keeping, so a coach
-      // can move a guy between squads without inventing a number for him.
-      if (group) {
-        seen.set(email, r);
-        goals.push({ row: r, name, email, goal: null, label: null, group });
-      }
-      continue;
-    }
-    // Excel silently converts low ranges like "5-10" into dates the moment
-    // they're typed. Catch that before it reads as a nonsense goal.
-    if (rawGoal instanceof Date) {
-      errors.push({
-        where: `Goals!C${r}`,
-        message: `${name || email}'s goal looks like Excel turned a range into a date. Type it with the word "to" (like 5 to 10), or format the cell as Text first.`,
-      });
-      continue;
+    } else if (long && long.value > weekly.value) {
+      // A long run longer than the whole week cannot be what he meant. Warned,
+      // not rejected: the numbers still post, and a coach who genuinely typed
+      // it that way is not blocked at 9pm on a Sunday.
+      longerThanWeek.push(name || email);
     }
 
-    let goal: number;
-    let label: string | null = null;
-    // Coaches write minimums — "60+" means at least sixty. Athletes see the
-    // "60+" exactly as written; the bar quietly tracks the floor. (A typed
-    // "+60" never reaches here: Excel itself reads that as the number 60.)
-    const plus = /^(\d+(?:\.\d+)?)\s*\+$/.exec(goalText);
-    // And ranges — "45-49", "45 – 49", "45 to 49". Shown as written; the bar
-    // tracks the middle of the range.
-    const range = /^(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)$/i.exec(goalText);
-    if (plus) {
-      goal = Number(plus[1]);
-      label = goalText;
-    } else if (range) {
-      const lo = Number(range[1]);
-      const hi = Number(range[2]);
-      if (lo > hi) {
-        errors.push({
-          where: `Goals!C${r}`,
-          message: `"${goalText}" is backwards — put the smaller number first, like ${hi}-${lo}.`,
-        });
-        continue;
-      }
-      goal = (lo + hi) / 2;
-      label = goalText;
-    } else {
-      goal = typeof rawGoal === "number" ? rawGoal : Number(goalText);
-    }
-    if (!Number.isFinite(goal)) {
-      errors.push({
-        where: `Goals!C${r}`,
-        message: `"${goalText}" isn't a number. Weekly goals are miles — like 70, a range like 45-49, or a minimum like 60+.`,
-      });
-      continue;
-    }
-    if (goal <= 0 || goal > MAX_GOAL) {
-      errors.push({
-        where: `Goals!C${r}`,
-        message: `A weekly goal of ${goal} miles isn't right — it should be between 1 and ${MAX_GOAL}.`,
-      });
-      continue;
-    }
+    // A row carrying only a group change, or only a long run, is still worth
+    // keeping — a coach can move a guy between squads, or set his long run,
+    // without inventing a weekly number for him.
+    if (!weekly && !long && !group) continue;
 
     seen.set(email, r);
-    goals.push({ row: r, name, email, goal: Math.round(goal * 10) / 10, label, group });
+    goals.push({
+      row: r,
+      name,
+      email,
+      goal: weekly ? weekly.value : null,
+      label: weekly ? weekly.label : null,
+      longRun: long ? long.value : null,
+      longRunLabel: long ? long.label : null,
+      group,
+    });
   }
 
   if (noMileage.length > 0) {
     const shown = noMileage.slice(0, 8).join(", ");
     const rest = noMileage.length - 8;
+    const where = `Goals!${colLetter(cols.goal)}`;
     warnings.push({
-      where: "Goals!C",
+      where,
       message:
         noMileage.length === 1
-          ? `${shown} has no mileage in column C — no goal for them this week.`
-          : `${noMileage.length} athletes have no mileage in column C — no goal for them this week: ${shown}${rest > 0 ? `, and ${rest} more` : ""}.`,
+          ? `${shown} has no mileage in column ${colLetter(cols.goal)} — no goal for them this week.`
+          : `${noMileage.length} athletes have no mileage in column ${colLetter(cols.goal)} — no goal for them this week: ${shown}${rest > 0 ? `, and ${rest} more` : ""}.`,
+    });
+  }
+
+  if (longerThanWeek.length > 0) {
+    const shown = longerThanWeek.slice(0, 8).join(", ");
+    const rest = longerThanWeek.length - 8;
+    warnings.push({
+      where: `Goals!${colLetter(cols.longRun as number)}`,
+      message:
+        longerThanWeek.length === 1
+          ? `${shown} has a long run longer than his whole week's mileage. Check the two columns aren't swapped.`
+          : `${longerThanWeek.length} athletes have a long run longer than their whole week's mileage: ${shown}${rest > 0 ? `, and ${rest} more` : ""}. Check the two columns aren't swapped.`,
     });
   }
 
@@ -396,7 +549,7 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
   }
   if (midInFile === 0 && !noMid) {
     warnings.push({
-      where: "Goals!D",
+      where: cols.group === null ? "Goals!row 1" : `Goals!${colLetter(cols.group)}`,
       message: "The mid-distance column has workouts in it, but nobody in this file is marked Mid-D. Anyone already set to Mid-D will still see them.",
     });
   }

@@ -2,7 +2,7 @@
 
 A digital training log for the UVA men's distance program — the weekly paper training sheet, digitized, with nothing about the coaching changed.
 
-The coach uploads his weekly plan (workout names + each athlete's weekly mileage goal) on Monday and grades the week Sunday night with the same per-day checkmarks and comments he writes in red pen today. Athletes log each day in under 45 seconds — distance, pace, effort, a dedicated **"anything hurting?" flag the coach sees the same day** instead of at Sunday hand-in, a question field, and notes. That same-day visibility of pain flags and questions is the whole reason this exists: paper has a five-day blind spot.
+The coach uploads his weekly plan (workout names + each athlete's weekly mileage and long run goals) on Monday and grades the week Sunday night with the same per-day checkmarks and comments he writes in red pen today. Athletes log each day in under 45 seconds — distance, pace, effort, a dedicated **"anything hurting?" flag the coach sees the same day** instead of at Sunday hand-in, a question field, and notes. That same-day visibility of pain flags and questions is the whole reason this exists: paper has a five-day blind spot.
 
 ## Status
 
@@ -22,6 +22,7 @@ Next.js 16 (App Router, TypeScript) PWA on Vercel · Supabase (Postgres, Auth, R
 | `docs/01–05` | Concept, product spec + gap analysis, coach proposal, adversarial pressure test, athlete one-pager |
 | `docs/08` | Infrastructure scope: stack, costs, what we deliberately don't need, build order |
 | `docs/16` | Two training groups (distance + mid-distance): the reworked week file, schema, build order |
+| `docs/17`, `docs/19` | Coach-facing emails: the two-schedule update, and the long run column |
 | `docs/18` | Backlog: the next five improvements, ranked against the Oct 1 adoption gates |
 | `docs/11` | Dictionary — team vocabulary (TR, LR, fartlek notation…) and product terms; also the plan-importer's parsing vocabulary |
 | `docs/mockups/` | Athlete portal mockups (06), interactive demo (07 — throwaway, never grows into the app), coach portal grid-vs-cards (09), and the real paper sheet photo (10 — ground truth) |
@@ -29,4 +30,4 @@ Next.js 16 (App Router, TypeScript) PWA on Vercel · Supabase (Postgres, Auth, R
 
 ## Principles that don't move
 
-Group-based plan authoring — two schedules, distance and mid-distance, one upload. PWA, no app stores. No Garmin/Strava sync promises (`.FIT` upload is the Phase-2 bridge). No coach response-time metrics, ever. No scores in grading — checkmarks and comments. One-click CSV export of everything at all times: worst case is always "export and go back to paper," and lock-in stays at zero. Pilot runs with paper in parallel; paper retires when the coach says so, not before.
+Group-based plan authoring — two schedules, distance and mid-distance, one upload. Two goals per athlete per week, weekly mileage and long run, both written the way the coach writes them; only the weekly number gets a progress bar. Goals-tab columns are found by header name and existing ones never move: new fields append on the right. PWA, no app stores. No Garmin/Strava sync promises (`.FIT` upload is the Phase-2 bridge). No coach response-time metrics, ever. No scores in grading — checkmarks and comments. One-click CSV export of everything at all times: worst case is always "export and go back to paper," and lock-in stays at zero. Pilot runs with paper in parallel; paper retires when the coach says so, not before.

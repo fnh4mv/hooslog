@@ -114,6 +114,10 @@ export default async function AthleteDrillIn({
     Math.round(logs.reduce((sum, l) => sum + Number(l.distance_mi), 0) * 10) / 10;
   const goal = athleteWeek?.mileage_goal == null ? null : Number(athleteWeek.mileage_goal);
   const goalLabel = athleteWeek?.goal_label ?? null; // "55-60" as written (0010)
+  // The long run you set for him this week (0012). Display only — no bar,
+  // no percentage: the weekly number is still the only thing tracked.
+  const longRun = athleteWeek?.long_run_goal == null ? null : Number(athleteWeek.long_run_goal);
+  const longRunLabel = athleteWeek?.long_run_label ?? null;
   // Uncapped (the bar clamps): 112% is exactly what the coach needs to see.
   const pct = goal && goal > 0 ? Math.round((totalMiles / goal) * 100) : 0;
   const daysLogged = new Set(logs.map((l) => l.log_date)).size;
@@ -189,6 +193,12 @@ export default async function AthleteDrillIn({
                 className="h-full rounded-full bg-navy"
                 style={{ width: `${Math.min(100, pct)}%` }}
               />
+            </div>
+          )}
+          {longRun !== null && (
+            <div className="mt-2 text-xs font-semibold text-ink-2">
+              Long run goal{" "}
+              <b className="text-navy">{longRunLabel ?? longRun} mi</b>
             </div>
           )}
         </section>

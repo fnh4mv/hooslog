@@ -83,6 +83,10 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
   const goal = athleteWeek?.mileage_goal ?? null;
   // "55-60" as the coach wrote it; the % math quietly uses the tracked number.
   const goalLabel = athleteWeek?.goal_label ?? null;
+  // The week's long run target (0012). Display only — it has no bar of its own
+  // (locked 28), so nothing here computes a percentage from it.
+  const longRun = athleteWeek?.long_run_goal ?? null;
+  const longRunLabel = athleteWeek?.long_run_label ?? null;
   // Never capped at 100: running past the goal is an injury-risk signal, and
   // hiding it from either side is how it goes unnoticed. Only the bar clamps.
   const pct = goal ? Math.round((totalMiles / Number(goal)) * 100) : 0;
@@ -332,11 +336,19 @@ export default async function AthleteHome({ searchParams }: PageProps<"/log">) {
             />
           </div>
         )}
-        <div className="mt-2.5 text-xs font-semibold text-ink-2">
-          <b className="text-navy">
-            {daysLogged} of 7
-          </b>{" "}
-          days logged
+        <div className="mt-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs font-semibold text-ink-2">
+          <span>
+            <b className="text-navy">
+              {daysLogged} of 7
+            </b>{" "}
+            days logged
+          </span>
+          {longRun !== null && (
+            <span>
+              Long run{" "}
+              <b className="text-navy">{longRunLabel ?? Number(longRun)} mi</b>
+            </span>
+          )}
         </div>
       </section>
 

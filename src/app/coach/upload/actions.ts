@@ -16,6 +16,11 @@ export type GoalPreview = {
   goal: number | null;
   /** The goal as written ("55-60", "60+"); null for a plain number. */
   label: string | null;
+  /** The week's long run target; null = the cell was blank, or the file
+   *  predates the column. */
+  longRun: number | null;
+  /** The long run as written ("14-16", "16+"); null for a plain number. */
+  longRunLabel: string | null;
   /** Name on the matched account, or null when no athlete has that email. */
   matchedName: string | null;
   /** What this file puts them in; null = leave them where they are. */
@@ -158,6 +163,24 @@ export async function previewUpload(formData: FormData): Promise<PreviewResult> 
     .is("deleted_at", null)
     .limit(1);
 
+  // Does this database know about long run goals yet? Unlike 0011, migration
+  // 0012 did NOT change import_week's signature — so an un-applied migration
+  // wouldn't fail the upload, it would post the week and quietly drop every
+  // long run. Say so on the preview, before the coach posts, not after.
+  if (goals.some((g) => g.longRun !== null)) {
+    const { error: longRunProbe } = await supabase
+      .from("athlete_weeks")
+      .select("long_run_goal")
+      .limit(1);
+    if (longRunProbe) {
+      warnings.push({
+        where: "Goals",
+        message:
+          "The long run update hasn't been applied to the database yet (migration 0012). Everything else posts normally, but the long run column will be ignored until it is. Tell William — it's a two-minute fix.",
+      });
+    }
+  }
+
   return {
     ok: true,
     preview: {
@@ -228,6 +251,10 @@ export async function commitUpload(formData: FormData): Promise<CommitResult> {
       email: g.email,
       goal: g.goal,
       label: g.label,
+      // Ignored by the 0011 function if 0012 hasn't been applied yet — extra
+      // jsonb keys are harmless there, and previewUpload has already warned.
+      long_run: g.longRun,
+      long_run_label: g.longRunLabel,
       group: g.group,
     })),
   });

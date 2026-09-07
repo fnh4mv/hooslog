@@ -118,14 +118,24 @@ function AthleteRow({
       ))}
 
       <td className="whitespace-nowrap px-3 py-2 text-right">
-        <span className="text-[13px] font-extrabold text-navy">
-          {row.totalMiles}
-        </span>
-        <span className="text-[11px] font-semibold text-muted">
-          {row.mileageGoal !== null
-            ? ` / ${row.goalLabel ?? row.mileageGoal}`
-            : " mi"}
-        </span>
+        <div>
+          <span className="text-[13px] font-extrabold text-navy">
+            {row.totalMiles}
+          </span>
+          <span className="text-[11px] font-semibold text-muted">
+            {row.mileageGoal !== null
+              ? ` / ${row.goalLabel ?? row.mileageGoal}`
+              : " mi"}
+          </span>
+        </div>
+        {/* Second line rather than a tenth column: the grid is already
+            820px of minimum width at 30 athletes, and the long run is a
+            target the coach set, not a number he has to scan across. */}
+        {row.longRunGoal !== null && (
+          <div className="text-[10px] font-semibold leading-tight text-muted">
+            LR {row.longRunLabel ?? row.longRunGoal}
+          </div>
+        )}
       </td>
       {/* Bar is always navy. It used to turn orange when under
           40% of the goal, which painted the whole roster orange
@@ -343,6 +353,9 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
           </span>
           <span>
             <b className="text-ink">am</b> = today, not in yet
+          </span>
+          <span>
+            <b className="text-ink">LR 14</b> = long run goal you set
           </span>
         </div>
       </main>

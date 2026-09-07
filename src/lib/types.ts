@@ -69,6 +69,8 @@ export type AthleteWeek = {
   week_start: string; // DATE, always a Monday
   mileage_goal: number | null; // coach-set weekly goal (locked 18) — the tracked number
   goal_label: string | null; // the goal AS WRITTEN ("55-60", "60+"); null = plain number (0010)
+  long_run_goal: number | null; // coach-set long run for the week (0012, locked 28) — display only
+  long_run_label: string | null; // the long run AS WRITTEN ("14-16", "16+"); null = plain number
   athlete_summary: string | null;
   coach_comment: string | null;
   reviewed_at: string | null;

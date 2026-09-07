@@ -1,16 +1,31 @@
 """
 Builds docs/templates/hooslog_week_plan_template.xlsx — the coach's weekly
-upload form, reworked for TWO training groups (distance + mid-distance).
+upload form. Two training groups (distance + mid-distance) and two goals per
+athlete (weekly mileage + long run).
 
 Why this script exists: the template IS the importer's format contract
 (CLAUDE.md locked 23). A hand-edited binary drifts from the parser and nobody
 can see how it was made. Regenerate with:  python3 scripts/build_week_template.py
 
-What changed from v1:
+v1 -> v2 (2026-08-31, two training groups):
   Week Plan!C  WORKOUT PLAN  ->  DISTANCE PLAN
   Week Plan!D  (new)             MID-DISTANCE PLAN
   Goals!D      (new)             GROUP  (dropdown: Distance / Mid-D; blank = no change)
   Goals rows   pre-filled with the 30 rostered athletes (no example row to delete)
+
+v2 -> v3 (2026-09-07, long run goal):
+  Goals!E      (new)             LONG RUN (MILES)
+
+GROUP STAYS IN COLUMN D. An earlier draft of this put long run in D so the two
+mileage numbers sat side by side, which reads better and is the wrong call:
+GROUP has been in D since August, it is where the coaches' own copies of this
+file have it, and moving a column on a coach mid-season is how a Monday upload
+breaks. New fields append on the right. That is the rule now.
+
+The parser matches Goals columns by their HEADER TEXT rather than by position,
+so order is not load-bearing either way and older files still import (they just
+carry no long run). Keep the words "long run" in that header: the parser looks
+for them. Do not rename headers without checking src/lib/importer.ts.
 """
 import datetime as dt
 from openpyxl import Workbook
@@ -127,25 +142,31 @@ gs.column_dimensions["A"].width = 26
 gs.column_dimensions["B"].width = 30
 gs.column_dimensions["C"].width = 20
 gs.column_dimensions["D"].width = 16
-gs.column_dimensions["F"].width = 52
+gs.column_dimensions["E"].width = 20
+gs.column_dimensions["G"].width = 52
 gs.row_dimensions[1].height = 39
 gs.freeze_panes = "A2"
 
-for col, text in zip("ABCD", ["ATHLETE NAME", "UVA EMAIL", "WEEKLY GOAL (MILES)", "GROUP"]):
+# Header text is the contract now, not column position — src/lib/importer.ts
+# locates these by name so the v2 file (GROUP in D, no long run) still imports.
+for col, text in zip(
+    "ABCDE",
+    ["ATHLETE NAME", "UVA EMAIL", "WEEKLY GOAL (MILES)", "GROUP", "LONG RUN (MILES)"],
+):
     c = gs[f"{col}1"]
     c.value, c.font, c.fill, c.border, c.alignment = text, head_f, navy_fill, bb, wrap_top
 
 last = 1 + len(ROSTER)
 for i, (name, email) in enumerate(ROSTER):
     r = 2 + i
-    for col, val in ((1, name), (2, email), (3, None), (4, None)):
+    for col, val in ((1, name), (2, email), (3, None), (4, None), (5, None)):
         c = gs.cell(row=r, column=col, value=val)
         c.font, c.border = body_f, bb
-        if col == 3:                       # mileage — right-aligned so "62" and
-            c.fill = yellow_fill           # "65-70" line up as one column
+        if col in (3, 5):                  # the two mileage numbers — right-aligned
+            c.fill = yellow_fill           # so "62" and "65-70" line up as a column
             c.alignment = Alignment(horizontal="right")
         elif col == 4:                     # group — centered, so it reads apart
-            c.fill = yellow_fill           # from the mileage beside it
+            c.fill = yellow_fill           # from the numbers on either side
             c.alignment = Alignment(horizontal="center")
 
 dv = DataValidation(type="list", formula1='"Distance,Mid-D"', allow_blank=True,
@@ -157,29 +178,31 @@ gs.add_data_validation(dv)
 dv.add(f"D2:D{last}")
 
 for r, txt in [
-    (1, "Yellow cells are yours: each athlete's weekly mileage, and their group."),
-    (2, "MILEAGE — everyone gets a number, both groups. Plain (58), a range"),
-    (3, '           (55-60), or a minimum (60+). Blank = no goal this week.'),
-    (4, "GROUP — Distance or Mid-D. This is what decides which of the two"),
+    (1, "Yellow cells are yours: weekly mileage, group, and long run."),
+    (2, "WEEKLY (C) — everyone gets a number, both groups. Plain (58), a range"),
+    (3, '           (55-60), or a minimum (60+). Blank = leave last week\'s alone.'),
+    (4, "GROUP (D) — Distance or Mid-D. This is what decides which of the two"),
     (5, "           plan columns the athlete sees. Set it once; it sticks week"),
     (6, "           to week. Leave blank to leave an athlete where they are."),
-    (7, "Names and emails are the current roster — don't retype them. The email"),
-    (8, "is how the upload finds each athlete's account."),
+    (7, "LONG RUN (E) — how long that week's long run should be, same formats"),
+    (8, "           as weekly (14, 14-16, 16+). Blank = no long run this week."),
+    (9, "Names and emails are the current roster — don't retype them. The email"),
+    (10, "is how the upload finds each athlete's account."),
 ]:
-    gs[f"F{r}"] = txt; gs[f"F{r}"].font = hint_f
-gs["F1"].font = Font(name="Arial", size=9, bold=True, color=NAVY)
+    gs[f"G{r}"] = txt; gs[f"G{r}"].font = hint_f
+gs["G1"].font = Font(name="Arial", size=9, bold=True, color=NAVY)
 
-# Sanity counters live in F/G on purpose. The importer walks Goals rows 2..N
-# reading columns A-C; anything it finds there is treated as an athlete, so a
+# Sanity counters live in G/H on purpose. The importer walks Goals rows 2..N
+# reading columns A-E; anything it finds there is treated as an athlete, so a
 # label in column A would come back as "row 33 has no email" and refuse the
-# whole upload. Columns E+ are outside the parsed range.
-gs.column_dimensions["G"].width = 10
+# whole upload. Columns F+ are outside the parsed range.
+gs.column_dimensions["H"].width = 10
 for off, (lbl, grp) in enumerate([("Mid-D:", "Mid-D"), ("Distance:", "Distance")]):
     r = last + 2 + off
-    gs[f"F{r}"] = lbl; gs[f"F{r}"].font = label_f
-    gs[f"G{r}"] = f'=COUNTIF($D$2:$D${last},"{grp}")'; gs[f"G{r}"].font = body_f
-gs[f"F{last+4}"] = "Blank group cells aren't counted — those guys stay where they were."
-gs[f"F{last+4}"].font = hint_f
+    gs[f"G{r}"] = lbl; gs[f"G{r}"].font = label_f
+    gs[f"H{r}"] = f'=COUNTIF($D$2:$D${last},"{grp}")'; gs[f"H{r}"].font = body_f
+gs[f"G{last+4}"] = "Blank group cells aren't counted — those guys stay where they were."
+gs[f"G{last+4}"].font = hint_f
 
 # ============================================================ READ ME
 rs = wb.create_sheet("READ ME")
@@ -189,15 +212,18 @@ rs["A1"] = "HoosLog week-plan template — how it works"; rs["A1"].font = title_
 lines = [
     (3,  "1. Week Plan tab: set the Monday date (one yellow cell). Type the distance guys' workout in", body_f),
     (4,  "   column C and the mid-D guys' workout in column D. Leave a day blank for no plan.", body_f),
-    (5,  "2. Goals tab: every athlete's weekly mileage, and their group (Distance or Mid-D).", body_f),
-    (6,  "   Everyone gets mileage. The group only decides which workout column they see.", body_f),
+    (5,  "2. Goals tab: each athlete's weekly mileage (C), his group (D), and his long run for that", body_f),
+    (6,  "   week (E). Everyone gets mileage. The group only decides which workout column he sees.", body_f),
     (7,  "3. Save, then drag this file into HoosLog (Coach → Post a week). You'll see exactly what it", body_f),
     (8,  "   says — including who's moving groups — before anything posts.", body_f),
-    (10, "Group assignment sticks. Once a guy is marked Mid-D he stays Mid-D every week until you", hint_f),
-    (11, "change that cell. A blank group cell changes nothing — it does not reset him to distance.", hint_f),
-    (13, "Rules the upload depends on: don't rename tabs, don't add or delete rows or columns on the", hint_f),
-    (14, "Week Plan tab, and emails on the Goals tab must match athletes' HoosLog login emails.", hint_f),
-    (16, "Recreated from the team's paper weekly sheet — same structure, same workflow. (docs/mockups/10)", hint_f),
+    (10, "Weekly and long run are independent. Filling one and leaving the other blank changes only", hint_f),
+    (11, "the one you filled in; it never clears the other.", hint_f),
+    (13, "Group assignment sticks. Once a guy is marked Mid-D he stays Mid-D every week until you", hint_f),
+    (14, "change that cell. A blank group cell changes nothing — it does not reset him to distance.", hint_f),
+    (16, "Rules the upload depends on: don't rename tabs or the Goals header row, don't add or delete", hint_f),
+    (17, "rows or columns on the Week Plan tab, and emails on the Goals tab must match athletes'", hint_f),
+    (18, "HoosLog login emails.", hint_f),
+    (20, "Recreated from the team's paper weekly sheet — same structure, same workflow. (docs/mockups/10)", hint_f),
 ]
 for r, txt, f in lines:
     rs[f"A{r}"] = txt; rs[f"A{r}"].font = f
