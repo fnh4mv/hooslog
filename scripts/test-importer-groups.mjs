@@ -159,5 +159,21 @@ ok(r.ok, "16 long run over the weekly total still posts");
 console.log("16 swapped columns warnings:", w(r));
 ok(r.ok && /longer than his whole week/i.test(w(r)), "16 warns the columns look swapped");
 
+// ---- headers a coach retyped by hand ----
+r = await P("17_relabelled_headers.xlsx");
+ok(r.ok, "17 hand-relabelled headers parse: " + e(r));
+if (r.ok) {
+  const gs = r.data.goals;
+  ok(gs.map(g => g.group).join() === "distance,mid", "17 'MID-D OR DISTANCE' is found as the group column, got " + gs.map(g => g.group).join());
+  ok(gs[0].longRun === 14 && gs[1].longRun === 11, "17 'LONG RUN DISTANCE' is found as the long run column");
+  ok(!/No GROUP column found/i.test(w(r)), "17 does not claim the group column is missing");
+}
+
+r = await P("18_no_group_header.xlsx");
+ok(r.ok, "18 an unrecognisable group header still posts");
+console.log("18 unrecognised group header warnings:", w(r));
+ok(r.ok && /No GROUP column found/i.test(w(r)), "18 says plainly that nobody's group will change");
+ok(r.ok && r.data.goals.every(g => g.group === null), "18 moves nobody");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

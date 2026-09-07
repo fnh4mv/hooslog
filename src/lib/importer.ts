@@ -77,6 +77,19 @@ const MAX_GOAL = 200; // a 200-mile week would be a world record; anything above
 // deliberately loose: the realistic mistake is the WEEKLY number typed into the
 // long run cell (65), and 40 catches that while never blocking a real long run.
 const MAX_LONG_RUN = 40;
+/**
+ * The Goals tab is five columns wide and the importer reads nothing past it.
+ * The template keeps its instruction text and squad counters in F onward for
+ * exactly that reason.
+ *
+ * The header scan MUST respect the same boundary. The hint line in G1 reads
+ * "Yellow cells are yours: weekly mileage, group, and long run" — it contains
+ * every word this lookup searches for. If the real GROUP header is ever
+ * renamed, an unbounded scan claims column G as the group column, and then
+ * every line of instructions comes back as "isn't a training group" while the
+ * counter rows come back as "row 33 has no email". Caught by fixture 18.
+ */
+const MAX_GOALS_COL = 5;
 const MAX_PLAN_CHARS = 500;
 
 /** What a coach might type in the GROUP column, normalised. The dropdown in
@@ -163,7 +176,8 @@ type GoalColumns = {
 };
 
 function locateGoalColumns(goalSheet: Cell[][]): GoalColumns {
-  const header = goalSheet[0] ?? [];
+  // Bounded on purpose — see MAX_GOALS_COL.
+  const header = (goalSheet[0] ?? []).slice(0, MAX_GOALS_COL);
   const found: Record<keyof GoalColumns, number | null> = {
     name: null, email: null, goal: null, longRun: null, group: null,
   };
@@ -177,7 +191,15 @@ function locateGoalColumns(goalSheet: Cell[][]): GoalColumns {
     else if (found.email === null && /e-?mail/.test(s)) found.email = col;
     else if (found.longRun === null && /long\s*-?\s*run/.test(s)) found.longRun = col;
     else if (found.goal === null && /weekly|mileage|miles|goal/.test(s)) found.goal = col;
-    else if (found.group === null && /group|squad/.test(s)) found.group = col;
+    // "GROUP" is what the template ships, but a coach relabelling this column
+    // by hand writes what it actually holds: "Mid-D or Distance". Matching only
+    // /group/ would leave that column unfound and quietly move nobody between
+    // squads, which is the worst failure this file has. Safe to include
+    // "distance" here only because longRun and goal both claim their columns
+    // first, so "LONG RUN DISTANCE" and "WEEKLY DISTANCE" never reach it.
+    else if (found.group === null && /group|squad|mid.?-?d|distance/.test(s)) {
+      found.group = col;
+    }
   });
   return {
     name: found.name ?? 1,
@@ -376,6 +398,16 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
 
   // ---- Goals tab: one athlete per row from row 2 ----
   const cols = locateGoalColumns(goalSheet);
+  if (cols.group === null) {
+    // Silence here is dangerous: with no GROUP column every athlete keeps the
+    // squad he already has, the mid-D guys quietly stay on the distance
+    // schedule, and the upload otherwise looks like a clean success.
+    warnings.push({
+      where: "Goals!row 1",
+      message:
+        "No GROUP column found on the Goals tab, so nobody's training group will change with this upload. If you meant to move anyone between Distance and Mid-D, check that the header on that column says GROUP.",
+    });
+  }
   if (cols.longRun === null) {
     warnings.push({
       where: "Goals!row 1",

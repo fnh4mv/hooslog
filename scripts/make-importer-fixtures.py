@@ -112,4 +112,20 @@ legacy(HDR_V2, True, f"{OUT}/11_legacy_v2_filled.xlsx", [
     ["Jimmy Wischusen", "kna3ed@virginia.edu", "55-60", "Mid-D"],
 ])
 
+# ---- headers relabelled by hand, the way a coach would ------------------
+# 17: exactly what Dunbar is likely to type after the meeting. The GROUP column
+# gets named for what it holds, and the long run column gets "DISTANCE" tacked
+# on. Both must still be found.
+wb = load()
+gs = wb["Goals"]
+gs.cell(row=1, column=C_GROUP, value="MID-D OR DISTANCE")
+gs.cell(row=1, column=C_LONG,  value="LONG RUN DISTANCE")
+fill(wb, dist=D, mid=M, rows=[(2, 62, 14, "Distance"), (3, 45, "10-12", "Mid-D")]).save(f"{OUT}/17_relabelled_headers.xlsx")
+
+# 18: the group column renamed to something the parser cannot recognise. The
+# upload must still post, and must SAY that nobody's group will change.
+wb = load()
+wb["Goals"].cell(row=1, column=C_GROUP, value="TRAINING TYPE")
+fill(wb, dist=D, mid=M, rows=[(2, 62, 14, None)]).save(f"{OUT}/18_no_group_header.xlsx")
+
 print("fixtures written to", OUT)
