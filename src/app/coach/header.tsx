@@ -59,7 +59,7 @@ export function CoachHeader({
 
         <div className="ml-auto flex items-center gap-2 [&_button]:mt-0 [&_button]:border-white/20 [&_button]:bg-white/10 [&_button]:text-white">
           <Link
-            href="/coach/upload"
+            href="/coach/week"
             className="rounded-xl border-[1.5px] border-white/20 bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/20"
           >
             Post a week

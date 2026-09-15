@@ -1,4 +1,5 @@
 import readXlsxFile from "read-excel-file/node";
+import { parseMileageInput, type MileageKind } from "@/lib/goal-input";
 import { isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
 
 /**
@@ -72,11 +73,10 @@ const PLAN_TAB = "week plan";
 const GOALS_TAB = "goals";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const EXAMPLE_EMAIL = "abc1de@virginia.edu";
-const MAX_GOAL = 200; // a 200-mile week would be a world record; anything above is a typo
-// Matches the per-log cap in migration 0003 and the column check in 0012. It is
-// deliberately loose: the realistic mistake is the WEEKLY number typed into the
-// long run cell (65), and 40 catches that while never blocking a real long run.
-const MAX_LONG_RUN = 40;
+// MAX_GOAL / MAX_LONG_RUN and the "55-60" / "60+" rule itself now live in
+// lib/goal-input, because the in-app week builder types the same figures into
+// a text box and two parsers would drift. What stays here is the part that is
+// genuinely about Excel: a cell that already arrived as a Date.
 /**
  * The Goals tab is five columns wide and the importer reads nothing past it.
  * The template keeps its instruction text and squad counters in F onward for
@@ -220,69 +220,28 @@ type MileageCell =
  * minimum (60+). Returns the tracked number — the value, a range's midpoint, a
  * minimum's floor — plus the text as written, which is what athletes see
  * (0010). null means the cell was blank, which is never an error here.
+ *
+ * The rule itself is parseMileageInput, shared with the in-app builder. Only
+ * the Date check below is Excel's problem.
  */
-function readMileage(
-  raw: Cell,
-  who: string,
-  what: "weekly goal" | "long run",
-  max: number,
-): MileageCell | null {
+function readMileage(raw: Cell, who: string, what: MileageKind): MileageCell | null {
   const s = text(raw);
   if (!s) return null;
 
   // Excel silently converts low ranges like "5-10" into dates the moment
-  // they're typed. Catch that before it reads as a nonsense number.
+  // they're typed. Catch that before it reads as a nonsense number. This is
+  // the failure the in-app builder does not have, and the reason it exists.
   if (raw instanceof Date) {
     return {
       ok: false,
-      message: `${who}'s ${what} looks like Excel turned a range into a date. Type it with the word "to" (like 5 to 10), or format the cell as Text first.`,
+      message: `${who}'s ${what} looks like Excel turned a range into a date. Type it with the word "to" (like 5 to 10), or format the cell as Text first — or use the week builder in the app, where this can't happen.`,
     };
   }
 
-  let value: number;
-  let label: string | null = null;
-  // Minimums — "60+" means at least sixty. Shown as written; the bar quietly
-  // tracks the floor. (A typed "+60" never reaches here: Excel itself reads
-  // that as the number 60.)
-  const plus = /^(\d+(?:\.\d+)?)\s*\+$/.exec(s);
-  // And ranges — "45-49", "45 – 49", "45 to 49". Shown as written; the bar
-  // tracks the middle.
-  const range = /^(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)$/i.exec(s);
-  if (plus) {
-    value = Number(plus[1]);
-    label = s;
-  } else if (range) {
-    const lo = Number(range[1]);
-    const hi = Number(range[2]);
-    if (lo > hi) {
-      return {
-        ok: false,
-        message: `"${s}" is backwards — put the smaller number first, like ${hi}-${lo}.`,
-      };
-    }
-    value = (lo + hi) / 2;
-    label = s;
-  } else {
-    value = typeof raw === "number" ? raw : Number(s);
-  }
-
-  if (!Number.isFinite(value)) {
-    const examples =
-      what === "weekly goal"
-        ? "like 70, a range like 45-49, or a minimum like 60+"
-        : "like 14, a range like 14-16, or a minimum like 16+";
-    return {
-      ok: false,
-      message: `"${s}" isn't a number. ${what === "weekly goal" ? "Weekly goals" : "Long runs"} are miles — ${examples}.`,
-    };
-  }
-  if (value <= 0 || value > max) {
-    return {
-      ok: false,
-      message: `A ${what} of ${value} miles isn't right — it should be between 1 and ${max}.`,
-    };
-  }
-  return { ok: true, value: Math.round(value * 10) / 10, label };
+  const parsed = parseMileageInput(s, what);
+  if (!parsed.ok) return { ok: false, message: parsed.message };
+  if (parsed.empty) return null;
+  return { ok: true, value: parsed.value, label: parsed.label };
 }
 
 /** Parse the uploaded workbook. Never throws — a bad file comes back as errors. */
@@ -487,13 +446,13 @@ export async function parseTemplate(file: Buffer): Promise<ParseResult> {
     // longer means "skip this athlete", it means "leave his weekly number
     // alone", and the same for a blank long run. That is what lets the coach
     // fill in only one of the two columns without wiping the other.
-    const weekly = readMileage(rawGoal, name || email, "weekly goal", MAX_GOAL);
+    const weekly = readMileage(rawGoal, name || email, "weekly goal");
     if (weekly && !weekly.ok) {
       errors.push({ where: `Goals!${colLetter(cols.goal)}${r}`, message: weekly.message });
       continue;
     }
     const long =
-      rawLong === null ? null : readMileage(rawLong, name || email, "long run", MAX_LONG_RUN);
+      rawLong === null ? null : readMileage(rawLong, name || email, "long run");
     if (long && !long.ok) {
       errors.push({
         where: `Goals!${colLetter(cols.longRun as number)}${r}`,

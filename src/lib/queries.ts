@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, fromISO, isoDate, mondayOf } from "@/lib/dates";
 import { rosterKey, shortName } from "@/lib/names";
+import { formatMileageInput } from "@/lib/goal-input";
 import { GROUPS } from "@/lib/types";
 import type { AthleteWeek, DayComment, DayReview, Log, LogKind, Profile, RunType, TrainingGroup, WeekComment, WeekPlan } from "@/lib/types";
 
@@ -569,5 +570,167 @@ export async function getCoachAthleteWeek(
     prevAthleteId: i > 0 ? roster[i - 1].id : null,
     nextAthleteId: i >= 0 && i < roster.length - 1 ? roster[i + 1].id : null,
     position: { index: i, total: roster.length },
+  };
+}
+
+// ===========================================================================
+// Week builder (in-app "Post a week")
+// ===========================================================================
+
+/** One row of the builder's roster grid. Goal/long run come back as the text
+ *  the coach typed, so loading a week and re-posting it unchanged is a no-op. */
+export type BuilderAthlete = {
+  id: string;
+  name: string;
+  short: string;
+  email: string;
+  group: TrainingGroup;
+  goal: string;
+  longRun: string;
+};
+
+export type BuilderPlans = Record<TrainingGroup, string[]>; // 7 each, Monday-first
+
+export type BuilderWeek = {
+  weekStartISO: string;
+  plans: BuilderPlans;
+  athletes: BuilderAthlete[];
+  /** A plan already exists for this week — posting replaces it. */
+  alreadyPosted: boolean;
+  /** The most recent week posted BEFORE this one. This is what makes the
+   *  builder faster than the spreadsheet: most weeks are last week with a few
+   *  numbers changed, and the coach's own habit is to open last week's file. */
+  previous: {
+    weekStartISO: string;
+    plans: BuilderPlans;
+    /** by email → the boxes, pre-formatted */
+    goals: Record<string, { goal: string; longRun: string }>;
+  } | null;
+};
+
+function emptyPlans(): BuilderPlans {
+  return { distance: Array(7).fill(""), mid: Array(7).fill("") };
+}
+
+function plansFromRows(rows: Pick<WeekPlan, "training_group" | "day" | "plan_text">[]): BuilderPlans {
+  const plans = emptyPlans();
+  for (const r of rows) {
+    const g = (r.training_group ?? "distance") as TrainingGroup;
+    if (!GROUPS.includes(g)) continue;
+    if (r.day < 0 || r.day > 6) continue;
+    plans[g][r.day] = r.plan_text ?? "";
+  }
+  return plans;
+}
+
+/**
+ * Everything the in-app week builder needs, in one round trip per concern.
+ *
+ * The roster is READ FROM THE DATABASE, which is the whole point: the
+ * spreadsheet re-sends thirty-one names and emails every single week, and
+ * every bug class it produced — a counter row parsed as an athlete, an email
+ * that matches nobody, a blank GROUP column, a reordered column — comes from
+ * the coach re-supplying data the app already has.
+ */
+export async function getWeekBuilder(
+  supabase: SupabaseClient,
+  weekStartISO: string,
+): Promise<BuilderWeek> {
+  const weekStart = fromISO(weekStartISO);
+  if (!weekStart) throw new Error(`getWeekBuilder: bad week start "${weekStartISO}"`);
+
+  const [rosterRes, weeksRes, plansRes, prevPlanRes] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id,name,email,training_group")
+      .eq("role", "athlete")
+      .in("status", ACTIVE_STATUSES)
+      .is("deleted_at", null),
+    supabase
+      .from("athlete_weeks")
+      .select("athlete_id,mileage_goal,goal_label,long_run_goal,long_run_label")
+      .eq("week_start", weekStartISO)
+      .is("deleted_at", null),
+    supabase
+      .from("week_plans")
+      .select("training_group,day,plan_text")
+      .eq("week_start", weekStartISO)
+      .is("deleted_at", null),
+    // The most recent week with a plan on it, strictly before this one.
+    supabase
+      .from("week_plans")
+      .select("week_start")
+      .lt("week_start", weekStartISO)
+      .is("deleted_at", null)
+      .order("week_start", { ascending: false })
+      .limit(1),
+  ]);
+
+  type RosterRow = { id: string; name: string; email: string; training_group: TrainingGroup | null };
+  type GoalRow = Pick<AthleteWeek, "athlete_id" | "mileage_goal" | "goal_label" | "long_run_goal" | "long_run_label">;
+
+  const roster = ((rosterRes.data as RosterRow[] | null) ?? []).slice();
+  const goalsByAthlete = new Map(
+    (((weeksRes.data as GoalRow[] | null) ?? [])).map((w) => [w.athlete_id, w]),
+  );
+
+  const athletes: BuilderAthlete[] = roster
+    .sort((a, b) => rosterKey(a).localeCompare(rosterKey(b)))
+    .map((p) => {
+      const w = goalsByAthlete.get(p.id);
+      return {
+        id: p.id,
+        name: p.name,
+        short: shortName(p),
+        email: p.email,
+        group: (p.training_group ?? "distance") as TrainingGroup,
+        goal: formatMileageInput(w?.mileage_goal, w?.goal_label),
+        longRun: formatMileageInput(w?.long_run_goal, w?.long_run_label),
+      };
+    });
+
+  const planRows = (plansRes.data as Pick<WeekPlan, "training_group" | "day" | "plan_text">[] | null) ?? [];
+
+  // ---- last posted week, for "start from last week" ----
+  const prevISO = ((prevPlanRes.data as { week_start: string }[] | null) ?? [])[0]?.week_start ?? null;
+  let previous: BuilderWeek["previous"] = null;
+  if (prevISO) {
+    const [prevPlans, prevGoals] = await Promise.all([
+      supabase
+        .from("week_plans")
+        .select("training_group,day,plan_text")
+        .eq("week_start", prevISO)
+        .is("deleted_at", null),
+      supabase
+        .from("athlete_weeks")
+        .select("athlete_id,mileage_goal,goal_label,long_run_goal,long_run_label")
+        .eq("week_start", prevISO)
+        .is("deleted_at", null),
+    ]);
+    const byId = new Map(roster.map((p) => [p.id, p.email]));
+    const goals: Record<string, { goal: string; longRun: string }> = {};
+    for (const w of ((prevGoals.data as GoalRow[] | null) ?? [])) {
+      const email = byId.get(w.athlete_id);
+      if (!email) continue; // someone who has since left the roster
+      goals[email] = {
+        goal: formatMileageInput(w.mileage_goal, w.goal_label),
+        longRun: formatMileageInput(w.long_run_goal, w.long_run_label),
+      };
+    }
+    previous = {
+      weekStartISO: prevISO,
+      plans: plansFromRows(
+        (prevPlans.data as Pick<WeekPlan, "training_group" | "day" | "plan_text">[] | null) ?? [],
+      ),
+      goals,
+    };
+  }
+
+  return {
+    weekStartISO,
+    plans: plansFromRows(planRows),
+    athletes,
+    alreadyPosted: planRows.length > 0,
+    previous,
   };
 }
