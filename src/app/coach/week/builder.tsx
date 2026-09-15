@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { addDays, fmtDayShort, fmtMonthDay, fromISO } from "@/lib/dates";
+import { addDays, fmtMonthDay, fromISO } from "@/lib/dates";
 import { parseMileageInput } from "@/lib/goal-input";
 import { GROUPS, GROUP_LABELS, GROUP_SHORT, type TrainingGroup } from "@/lib/types";
 import type { BuilderWeek } from "@/lib/queries";
@@ -62,6 +62,118 @@ function rowsFrom(data: BuilderWeek): Row[] {
     savedGoal: a.goal,
     savedLongRun: a.longRun,
   }));
+}
+
+const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** "Mon Sep 21" — the day name matters, because the one thing a coach must
+ *  never be unsure of is which Monday he is filling in. */
+function fmtLongDay(d: Date): string {
+  return `${DOW_SHORT[d.getDay()]} ${fmtMonthDay(d)}`;
+}
+
+/** How far off "now" this week is, in the words a coach would use. */
+function weekOffsetLabel(weekISO: string, currentISO: string): string {
+  const a = fromISO(weekISO);
+  const b = fromISO(currentISO);
+  if (!a || !b) return "";
+  const weeks = Math.round((a.getTime() - b.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  if (weeks === 0) return "This week";
+  if (weeks === 1) return "Next week";
+  if (weeks === -1) return "Last week";
+  return weeks > 0 ? `${weeks} weeks ahead` : `${-weeks} weeks ago`;
+}
+
+/**
+ * Which week am I posting? The spreadsheet answered this with a date typed
+ * into cell B3, which is exactly the kind of thing that goes wrong quietly.
+ * Here it is the largest text on the page, spelled out with day names and
+ * both ends of the week, and it says in plain words whether that is this
+ * week, next week, or one already gone.
+ */
+function WeekBanner({
+  weekStartISO,
+  currentMondayISO,
+  alreadyPosted,
+  prevWeekISO,
+  nextWeekISO,
+  compact,
+}: {
+  weekStartISO: string;
+  currentMondayISO: string;
+  alreadyPosted: boolean;
+  prevWeekISO?: string;
+  nextWeekISO?: string;
+  compact?: boolean;
+}) {
+  const monday = fromISO(weekStartISO);
+  if (!monday) return null;
+  const sunday = addDays(monday, 6);
+  const offset = weekOffsetLabel(weekStartISO, currentMondayISO);
+  const isPast = weekStartISO < currentMondayISO;
+
+  return (
+    <section
+      className={`rounded-2xl border-[1.5px] bg-white px-4 py-3.5 ${
+        isPast ? "border-orange" : "border-line"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div>
+          <p className="text-[11px] font-extrabold tracking-[0.08em] text-muted">
+            {alreadyPosted ? "EDITING THE WEEK OF" : "POSTING THE WEEK OF"}
+          </p>
+          <p className="text-[22px] font-extrabold leading-tight tracking-tight text-navy">
+            {fmtLongDay(monday)} – {fmtLongDay(sunday)}
+          </p>
+        </div>
+
+        <span
+          className={`self-end rounded-lg px-2 py-1 text-[11px] font-extrabold ${
+            isPast ? "bg-orange-soft text-orange-ink" : "bg-navy-soft text-navy"
+          }`}
+        >
+          {offset}
+        </span>
+
+        {!compact && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {prevWeekISO && (
+              <Link
+                href={`/coach/week?week=${prevWeekISO}`}
+                className="rounded-lg border-[1.5px] border-line bg-white px-2.5 py-1 text-[11px] font-bold text-ink-2 hover:border-navy hover:text-navy"
+              >
+                ‹ Week before
+              </Link>
+            )}
+            {weekStartISO !== currentMondayISO && (
+              <Link
+                href="/coach/week"
+                className="rounded-lg border-[1.5px] border-line bg-white px-2.5 py-1 text-[11px] font-bold text-ink-2 hover:border-navy hover:text-navy"
+              >
+                This week
+              </Link>
+            )}
+            {nextWeekISO && (
+              <Link
+                href={`/coach/week?week=${nextWeekISO}`}
+                className="rounded-lg border-[1.5px] border-navy bg-navy px-2.5 py-1 text-[11px] font-bold text-white hover:bg-navy/90"
+              >
+                Week after ›
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+
+      <p className="mt-2 text-[13px] font-semibold text-ink-2">
+        {alreadyPosted
+          ? "A week is already posted here — these boxes show what's live. Posting replaces it; every other week stays as it is."
+          : "Nothing is posted for this week yet."}
+        {isPast && " This week has already been run."}
+      </p>
+    </section>
+  );
 }
 
 /* ------------------------------------------------------------------ pieces */
@@ -438,14 +550,14 @@ export function WeekBuilder({
   if (stage === "review") {
     return (
       <div className="flex flex-col gap-4">
-        <Card title="Ready to post" hint={monday ? `Week of ${fmtMonthDay(monday)} – ${fmtMonthDay(addDays(monday, 6))}` : undefined}>
+        <WeekBanner
+          weekStartISO={weekStartISO}
+          currentMondayISO={currentMondayISO}
+          alreadyPosted={data.alreadyPosted}
+          compact
+        />
+        <Card title="Ready to post">
           <div className="flex flex-col gap-4 px-4 py-4">
-            {data.alreadyPosted && (
-              <p className="rounded-xl border-[1.5px] border-orange bg-orange-soft px-3 py-2 text-[13px] font-semibold text-orange-ink">
-                A week is already posted here. Posting replaces its workouts and updates the goals you filled in. Other weeks are untouched.
-              </p>
-            )}
-
             <div className="grid gap-4 sm:grid-cols-2">
               {GROUPS.map((g) => (
                 <div key={g}>
@@ -530,11 +642,13 @@ export function WeekBuilder({
         </p>
       )}
 
-      {data.alreadyPosted && (
-        <p className="rounded-xl border-[1.5px] border-orange bg-orange-soft px-3 py-2 text-[13px] font-semibold text-orange-ink">
-          A week is already posted here — these boxes show what&apos;s live. Posting replaces it. Every other week stays as it is.
-        </p>
-      )}
+      <WeekBanner
+        weekStartISO={weekStartISO}
+        currentMondayISO={currentMondayISO}
+        alreadyPosted={data.alreadyPosted}
+        prevWeekISO={prevWeekISO}
+        nextWeekISO={nextWeekISO}
+      />
 
       {serverErrors.length > 0 && (
         <div className="rounded-xl border-[1.5px] border-orange bg-orange-soft px-3 py-2">
@@ -586,7 +700,7 @@ export function WeekBuilder({
                   <td className="px-4 py-2 align-top">
                     <div className="text-[13px] font-extrabold text-navy">{day.slice(0, 3)}</div>
                     <div className="text-[11px] font-semibold text-muted">
-                      {monday ? fmtDayShort(addDays(monday, i)).split(" ")[1] : ""}
+                      {monday ? fmtMonthDay(addDays(monday, i)) : ""}
                     </div>
                   </td>
                   {GROUPS.map((g) => (
@@ -679,6 +793,28 @@ export function WeekBuilder({
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {data.pending.length > 0 && (
+          <div className="border-t border-line px-4 py-3">
+            <p className="text-[11px] font-extrabold tracking-[0.06em] text-muted">
+              ON THE ROSTER, NO ACCOUNT YET — {data.pending.length}
+            </p>
+            <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+              {data.pending.map((a) => (
+                <li key={a.email} className="text-[13px] text-ink-2">
+                  <span className="font-bold text-ink">{a.name}</span>{" "}
+                  <span className="text-muted">{a.email}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-[12px] leading-snug text-ink-2">
+              They can sign up — they&apos;re on the allowlist — but a goal needs an
+              account to live on, so they&apos;ll appear in the grid above the moment
+              they create one. Post the week now; their goals can go in next week,
+              or re-post this week once they&apos;re in.
+            </p>
           </div>
         )}
       </Card>

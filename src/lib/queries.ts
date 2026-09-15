@@ -597,6 +597,11 @@ export type BuilderWeek = {
   athletes: BuilderAthlete[];
   /** A plan already exists for this week — posting replaces it. */
   alreadyPosted: boolean;
+  /** On the roster allowlist but with no account yet, so they have no profile
+   *  to hang a goal on. The spreadsheet template listed these men and let the
+   *  coach type a number that import_week then refused; naming them here and
+   *  saying why is the honest version of the same information. */
+  pending: { email: string; name: string }[];
   /** The most recent week posted BEFORE this one. This is what makes the
    *  builder faster than the spreadsheet: most weeks are last week with a few
    *  numbers changed, and the coach's own habit is to open last week's file. */
@@ -639,7 +644,7 @@ export async function getWeekBuilder(
   const weekStart = fromISO(weekStartISO);
   if (!weekStart) throw new Error(`getWeekBuilder: bad week start "${weekStartISO}"`);
 
-  const [rosterRes, weeksRes, plansRes, prevPlanRes] = await Promise.all([
+  const [rosterRes, weeksRes, plansRes, prevPlanRes, allowRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("id,name,email,training_group")
@@ -664,6 +669,10 @@ export async function getWeekBuilder(
       .is("deleted_at", null)
       .order("week_start", { ascending: false })
       .limit(1),
+    // Coaches can read the signup allowlist (migration 0005). If the policy
+    // ever says otherwise this degrades to "nobody is pending" rather than
+    // taking the page down.
+    supabase.from("athlete_emails").select("email,name"),
   ]);
 
   type RosterRow = { id: string; name: string; email: string; training_group: TrainingGroup | null };
@@ -690,6 +699,12 @@ export async function getWeekBuilder(
     });
 
   const planRows = (plansRes.data as Pick<WeekPlan, "training_group" | "day" | "plan_text">[] | null) ?? [];
+
+  const hasAccount = new Set(roster.map((p) => p.email));
+  const pending = (((allowRes.data as { email: string; name: string | null }[] | null) ?? [])
+    .filter((a) => !hasAccount.has(a.email))
+    .map((a) => ({ email: a.email, name: (a.name ?? "").trim() || a.email })))
+    .sort((a, b) => rosterKey(a).localeCompare(rosterKey(b)));
 
   // ---- last posted week, for "start from last week" ----
   const prevISO = ((prevPlanRes.data as { week_start: string }[] | null) ?? [])[0]?.week_start ?? null;
@@ -731,6 +746,7 @@ export async function getWeekBuilder(
     plans: plansFromRows(planRows),
     athletes,
     alreadyPosted: planRows.length > 0,
+    pending,
     previous,
   };
 }
