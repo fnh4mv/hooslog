@@ -11,7 +11,7 @@ v1 -> v2 (2026-08-31, two training groups):
   Week Plan!C  WORKOUT PLAN  ->  DISTANCE PLAN
   Week Plan!D  (new)             MID-DISTANCE PLAN
   Goals!D      (new)             GROUP  (dropdown: Distance / Mid-D; blank = no change)
-  Goals rows   pre-filled with the 30 rostered athletes (no example row to delete)
+  Goals rows   pre-filled with the 31 rostered athletes (no example row to delete)
 
 v2 -> v3 (2026-09-07, long run goal):
   Goals!E      (new)             LONG RUN (MILES)
@@ -49,7 +49,7 @@ thin = Side(style="thin", color="FFBFC5D2")
 bb   = Border(bottom=thin)
 wrap_top = Alignment(wrap_text=True, vertical="top")
 
-# Roster: supabase/migrations/0005_closed_roster.sql (30 athletes), by last name.
+# Roster: supabase/migrations/0005_closed_roster.sql + 0014 (31 athletes), by last name.
 ROSTER = [
     ("Henry Elijah Acorn", "dms7jc@virginia.edu"),
     ("Adam Christopher Balewicz", "hww4nw@virginia.edu"),
@@ -71,6 +71,7 @@ ROSTER = [
     ("Andrew Graham Jones", "hub9fh@virginia.edu"),
     ("Alex Leath", "kxy2qc@virginia.edu"),
     ("Kayden Thomas Lightner", "nvv5qk@virginia.edu"),
+    ("Andrew Tyler Mangum", "utb5vp@virginia.edu"),
     ("Brenden Michael McMahon", "zwh3ga@virginia.edu"),
     ("Eric Moore", "zqu3wh@virginia.edu"),
     ("Richard Charles Moreno", "jxm8cj@virginia.edu"),
