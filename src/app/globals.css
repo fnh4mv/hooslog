@@ -21,6 +21,13 @@
   --color-green-soft: #eaf4ee;
   --color-red: #e5484d;        /* reminders / overdue — distinct from orange (pain) */
   --color-red-soft: #fdecec;
+  /* Mid-distance, in the week builder only. The two schedules have been
+     confused often enough to be worth a colour each, and the two colours
+     already in play are spoken for: navy is structure, orange is "look at
+     this". Teal is the third hue that is neither. 5.4:1 on white and 4.6:1
+     on its own soft tint, so it can carry text and not just fills. */
+  --color-teal: #0f6f7a;
+  --color-teal-soft: #e6f2f4;
   --color-page: #f7f8fa;
 }
 

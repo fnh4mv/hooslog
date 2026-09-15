@@ -30,6 +30,28 @@ import { postWeek, type PostError } from "./actions";
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+/**
+ * A colour per schedule. Mixing the two up is the most expensive mistake this
+ * screen can make — it is what posted an empty mid-distance week on 8/31 — so
+ * the two columns never look alike. Navy is the house colour and carries
+ * distance; teal is the only other hue not already spoken for (orange means
+ * "look at this", and it has to keep meaning only that).
+ */
+const ACCENT: Record<TrainingGroup, { chip: string; tint: string; empty: string; on: string }> = {
+  distance: {
+    chip: "bg-navy text-white",
+    tint: "bg-navy-soft/40",
+    empty: "border-dashed border-navy/50 bg-navy-soft/60 placeholder:text-ink-2",
+    on: "bg-navy text-white",
+  },
+  mid: {
+    chip: "bg-teal text-white",
+    tint: "bg-teal-soft/50",
+    empty: "border-dashed border-teal/50 bg-teal-soft/70 placeholder:text-ink-2",
+    on: "bg-teal text-white",
+  },
+};
+
 type Row = {
   email: string;
   name: string;
@@ -116,13 +138,13 @@ function WeekBanner({
 
   return (
     <section
-      className={`rounded-2xl border-[1.5px] bg-white px-4 py-3.5 ${
-        isPast ? "border-orange" : "border-line"
+      className={`overflow-hidden rounded-2xl border-[1.5px] border-l-[6px] px-4 py-3.5 ${
+        isPast ? "border-orange border-l-orange bg-orange-soft" : "border-line border-l-navy bg-navy-soft"
       }`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div>
-          <p className="text-[11px] font-extrabold tracking-[0.08em] text-muted">
+          <p className={`text-[11px] font-extrabold tracking-[0.08em] ${isPast ? "text-orange-ink" : "text-navy/70"}`}>
             {alreadyPosted ? "EDITING THE WEEK OF" : "POSTING THE WEEK OF"}
           </p>
           <p className="text-[22px] font-extrabold leading-tight tracking-tight text-navy">
@@ -131,8 +153,8 @@ function WeekBanner({
         </div>
 
         <span
-          className={`self-end rounded-lg px-2 py-1 text-[11px] font-extrabold ${
-            isPast ? "bg-orange-soft text-orange-ink" : "bg-navy-soft text-navy"
+          className={`self-end rounded-lg px-2.5 py-1 text-[11.5px] font-extrabold ${
+            isPast ? "bg-orange-ink text-white" : "bg-navy text-white"
           }`}
         >
           {offset}
@@ -143,7 +165,7 @@ function WeekBanner({
             {prevWeekISO && (
               <Link
                 href={`/coach/week?week=${prevWeekISO}`}
-                className="rounded-lg border-[1.5px] border-line bg-white px-2.5 py-1 text-[11px] font-bold text-ink-2 hover:border-navy hover:text-navy"
+                className="rounded-lg border-[1.5px] border-navy/20 bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-navy hover:border-navy"
               >
                 ‹ Week before
               </Link>
@@ -151,7 +173,7 @@ function WeekBanner({
             {weekStartISO !== currentMondayISO && (
               <Link
                 href="/coach/week"
-                className="rounded-lg border-[1.5px] border-line bg-white px-2.5 py-1 text-[11px] font-bold text-ink-2 hover:border-navy hover:text-navy"
+                className="rounded-lg border-[1.5px] border-navy/20 bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-navy hover:border-navy"
               >
                 This week
               </Link>
@@ -159,7 +181,7 @@ function WeekBanner({
             {nextWeekISO && (
               <Link
                 href={`/coach/week?week=${nextWeekISO}`}
-                className="rounded-lg border-[1.5px] border-navy bg-navy px-2.5 py-1 text-[11px] font-bold text-white hover:bg-navy/90"
+                className="rounded-lg border-[1.5px] border-navy bg-navy px-2.5 py-1.5 text-[11.5px] font-bold text-white hover:bg-navy/90"
               >
                 Week after ›
               </Link>
@@ -168,7 +190,7 @@ function WeekBanner({
         )}
       </div>
 
-      <p className="mt-2 text-[13px] font-semibold text-ink-2">
+      <p className="mt-2 text-[13.5px] font-semibold text-ink-2">
         {alreadyPosted
           ? "A week is already posted here — these boxes show what's live. Posting replaces it; every other week stays as it is."
           : "Nothing is posted for this week yet."}
@@ -176,7 +198,7 @@ function WeekBanner({
       </p>
 
       {openedAhead && (
-        <p className="mt-1 text-[12px] font-semibold text-muted">
+        <p className="mt-1 text-[12.5px] font-semibold text-ink-2">
           Opened on the week ahead — from Sunday midday the builder moves on to the week coming. Use “This week” above if you meant the one finishing.
         </p>
       )}
@@ -198,10 +220,10 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border-[1.5px] border-line bg-white">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-4 py-3">
+    <section className="overflow-hidden rounded-2xl border-[1.5px] border-line bg-white">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b-[1.5px] border-line bg-navy-soft px-4 py-3">
         <h2 className="text-[15px] font-extrabold tracking-tight text-navy">{title}</h2>
-        {hint && <p className="text-[12px] text-ink-2">{hint}</p>}
+        {hint && <p className="text-[12.5px] font-semibold text-ink-2">{hint}</p>}
         {right && <div className="ml-auto flex items-center gap-2">{right}</div>}
       </div>
       {children}
@@ -253,8 +275,8 @@ function GroupToggle({
           type="button"
           onClick={() => onChange(g)}
           aria-pressed={value === g}
-          className={`px-2.5 py-1 text-[11px] font-bold ${
-            value === g ? "bg-navy text-white" : "bg-white text-ink-2 hover:bg-navy-soft"
+          className={`px-2.5 py-1 text-[11.5px] font-bold ${
+            value === g ? ACCENT[g].on : "bg-white text-ink-2 hover:bg-navy-soft"
           }`}
         >
           {GROUP_SHORT[g]}
@@ -282,6 +304,7 @@ function MileageBox({
 }) {
   const parsed = parseMileageInput(value, kind);
   const bad = !parsed.ok;
+  const empty = !value.trim();
   // A range or a minimum is shown back as the number it will actually track,
   // so "12-13" reads as "avg 12.5" and never as December.
   const echo =
@@ -309,15 +332,26 @@ function MileageBox({
         inputMode="text"
         placeholder="—"
         aria-invalid={bad}
-        className={`w-[74px] rounded-lg border-[1.5px] px-2 py-1 text-[13px] font-semibold tabular-nums outline-none focus:border-navy ${
-          bad ? "border-orange bg-orange-soft text-orange-ink" : "border-line bg-white text-ink"
+        // Three states the coach can tell apart without reading anything:
+        // wrong (orange), waiting for him (tinted, dashed), done (white, solid,
+        // dark bold figure). An empty box should look like a gap, not a field.
+        className={`w-[78px] rounded-lg border-[1.5px] px-2 py-1.5 text-[14px] font-bold tabular-nums outline-none focus:border-navy focus:bg-white ${
+          bad
+            ? "border-orange bg-orange-soft text-orange-ink"
+            : empty
+              ? "border-dashed border-navy/50 bg-navy-soft/60 text-ink placeholder:text-ink-2"
+              : "border-line bg-white text-ink"
         }`}
       />
-      {bad && <p className="mt-0.5 max-w-[190px] text-[10px] font-semibold leading-tight text-orange-ink">{parsed.message}</p>}
-      {!bad && echo && <p className="mt-0.5 text-[10px] font-semibold text-muted tabular-nums">{echo}</p>}
+      {bad && (
+        <p className="mt-1 max-w-[190px] text-[11.5px] font-bold leading-tight text-orange-ink">{parsed.message}</p>
+      )}
+      {!bad && echo && (
+        <p className="mt-1 text-[11.5px] font-bold tabular-nums text-teal">{echo}</p>
+      )}
       {!bad && !echo && keeps && (
-        <p className="mt-0.5 max-w-[190px] text-[10px] font-semibold leading-tight text-muted">
-          blank keeps {keeps}
+        <p className="mt-1 max-w-[190px] text-[11.5px] font-semibold leading-tight text-ink-2">
+          blank keeps <span className="font-bold text-ink">{keeps}</span>
         </p>
       )}
     </div>
@@ -570,15 +604,17 @@ export function WeekBuilder({
           <div className="flex flex-col gap-4 px-4 py-4">
             <div className="grid gap-4 sm:grid-cols-2">
               {GROUPS.map((g) => (
-                <div key={g}>
-                  <h3 className="text-[12px] font-extrabold tracking-[0.06em] text-muted">
+                <div key={g} className={`rounded-xl p-3 ${ACCENT[g].tint}`}>
+                  <h3
+                    className={`inline-flex rounded-lg px-2 py-1 text-[11px] font-extrabold tracking-[0.06em] ${ACCENT[g].chip}`}
+                  >
                     {GROUP_LABELS[g].toUpperCase()} · {counts[g]} {counts[g] === 1 ? "ATHLETE" : "ATHLETES"}
                   </h3>
-                  <ul className="mt-1.5 flex flex-col gap-1">
+                  <ul className="mt-2 flex flex-col gap-1">
                     {plans[g].map((t, i) => (
-                      <li key={i} className="flex gap-2 text-[13px]">
-                        <span className="w-[42px] shrink-0 font-bold text-muted">{DAY_NAMES[i].slice(0, 3)}</span>
-                        <span className={t.trim() ? "text-ink" : "text-muted"}>{t.trim() || "—"}</span>
+                      <li key={i} className="flex gap-2 text-[13.5px]">
+                        <span className="w-[42px] shrink-0 font-extrabold text-navy">{DAY_NAMES[i].slice(0, 3)}</span>
+                        <span className={t.trim() ? "font-medium text-ink" : "text-ink-2"}>{t.trim() || "no plan"}</span>
                       </li>
                     ))}
                   </ul>
@@ -599,16 +635,20 @@ export function WeekBuilder({
               </div>
             )}
 
-            <p className="text-[13px] text-ink-2">
-              <span className="font-bold text-ink">{goalsFilled}</span> of {rows.length} athletes have a goal or long run filled in.
+            <p className="rounded-xl bg-navy-soft px-3 py-2 text-[13.5px] font-semibold text-ink">
+              <span className="text-[16px] font-extrabold text-navy">{goalsFilled}</span> of {rows.length} athletes
+              have a goal or long run filled in.
             </p>
 
             {warnings.length > 0 && (
-              <ul className="flex flex-col gap-1">
-                {warnings.map((w, i) => (
-                  <li key={i} className="text-[12px] font-semibold text-orange-ink">• {w}</li>
-                ))}
-              </ul>
+              <div className="rounded-xl border-[1.5px] border-orange bg-orange-soft px-3 py-2.5">
+                <p className="text-[11px] font-extrabold tracking-[0.06em] text-orange-ink">WORTH A LOOK FIRST</p>
+                <ul className="mt-1.5 flex flex-col gap-1">
+                  {warnings.map((w, i) => (
+                    <li key={i} className="text-[13px] font-semibold leading-snug text-ink">{w}</li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             {serverErrors.length > 0 && (
@@ -695,12 +735,18 @@ export function WeekBuilder({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse">
             <thead>
-              <tr className="border-b border-line">
-                <th className="w-[92px] px-4 py-2 text-left text-[11px] font-extrabold tracking-[0.06em] text-muted">DAY</th>
+              <tr className="border-b-[1.5px] border-line">
+                <th className="w-[100px] px-4 py-2.5 text-left text-[11px] font-extrabold tracking-[0.08em] text-muted">
+                  DAY
+                </th>
                 {GROUPS.map((g) => (
-                  <th key={g} className="px-3 py-2 text-left text-[11px] font-extrabold tracking-[0.06em] text-muted">
-                    {GROUP_LABELS[g].toUpperCase()}
-                    <span className="ml-1.5 font-bold text-ink-2">{counts[g]}</span>
+                  <th key={g} className={`px-3 py-2.5 text-left ${ACCENT[g].tint}`}>
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-extrabold tracking-[0.06em] ${ACCENT[g].chip}`}
+                    >
+                      {GROUP_LABELS[g].toUpperCase()}
+                      <span className="rounded bg-white/25 px-1.5 py-0.5 tabular-nums">{counts[g]}</span>
+                    </span>
                   </th>
                 ))}
               </tr>
@@ -708,20 +754,24 @@ export function WeekBuilder({
             <tbody>
               {DAY_NAMES.map((day, i) => (
                 <tr key={day} className="border-b border-line last:border-0">
-                  <td className="px-4 py-2 align-top">
-                    <div className="text-[13px] font-extrabold text-navy">{day.slice(0, 3)}</div>
-                    <div className="text-[11px] font-semibold text-muted">
+                  <td className="px-4 py-2.5 align-top">
+                    <div className={`text-[13.5px] font-extrabold ${i >= 5 ? "text-orange-ink" : "text-navy"}`}>
+                      {day.slice(0, 3)}
+                    </div>
+                    <div className="text-[11.5px] font-bold text-ink-2">
                       {monday ? fmtMonthDay(addDays(monday, i)) : ""}
                     </div>
                   </td>
                   {GROUPS.map((g) => (
-                    <td key={g} className="px-3 py-2 align-top">
+                    <td key={g} className={`px-3 py-2.5 align-top ${ACCENT[g].tint}`}>
                       <textarea
                         value={plans[g][i]}
                         onChange={(e) => setDay(g, i, e.target.value)}
                         rows={2}
-                        placeholder="—"
-                        className="w-full resize-y rounded-lg border-[1.5px] border-line bg-white px-2 py-1.5 text-[13px] leading-snug text-ink outline-none focus:border-navy"
+                        placeholder="no plan yet"
+                        className={`w-full resize-y rounded-lg border-[1.5px] px-2 py-1.5 text-[13.5px] font-medium leading-snug text-ink outline-none focus:border-navy focus:bg-white ${
+                          plans[g][i].trim() ? "border-line bg-white" : ACCENT[g].empty
+                        }`}
                       />
                     </td>
                   ))}
@@ -747,6 +797,35 @@ export function WeekBuilder({
           </>
         }
       >
+        {rows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-3">
+            <p className="text-[13.5px] font-bold text-ink">
+              <span className={goalsFilled === rows.length ? "text-green" : "text-orange-ink"}>
+                {goalsFilled}
+              </span>{" "}
+              of {rows.length} filled in
+            </p>
+            <div
+              className="h-2 min-w-[140px] flex-1 overflow-hidden rounded-full bg-navy-soft"
+              role="progressbar"
+              aria-valuenow={goalsFilled}
+              aria-valuemin={0}
+              aria-valuemax={rows.length}
+              aria-label="Athletes with a goal filled in"
+            >
+              <div
+                className={`h-full rounded-full transition-all ${goalsFilled === rows.length ? "bg-green" : "bg-orange-ink"}`}
+                style={{ width: `${rows.length ? (goalsFilled / rows.length) * 100 : 0}%` }}
+              />
+            </div>
+            {goalsFilled < rows.length && (
+              <p className="text-[12.5px] font-semibold text-ink-2">
+                Shaded boxes are still empty — that&apos;s fine, blank just means no new number.
+              </p>
+            )}
+          </div>
+        )}
+
         {rows.length === 0 ? (
           <p className="px-4 py-6 text-[14px] text-ink-2">
             Nobody has signed up yet. Once athletes create accounts they appear here automatically.
@@ -755,28 +834,33 @@ export function WeekBuilder({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse">
               <thead>
-                <tr className="border-b border-line">
-                  <th className="px-4 py-2 text-left text-[11px] font-extrabold tracking-[0.06em] text-muted">ATHLETE</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-extrabold tracking-[0.06em] text-muted">SCHEDULE</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-extrabold tracking-[0.06em] text-muted">WEEKLY (MI)</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-extrabold tracking-[0.06em] text-muted">LONG RUN (MI)</th>
+                <tr className="border-b-[1.5px] border-line bg-navy-soft/60">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-extrabold tracking-[0.08em] text-navy">ATHLETE</th>
+                  <th className="px-3 py-2.5 text-left text-[11px] font-extrabold tracking-[0.08em] text-navy">SCHEDULE</th>
+                  <th className="px-3 py-2.5 text-left text-[11px] font-extrabold tracking-[0.08em] text-navy">WEEKLY (MI)</th>
+                  <th className="px-3 py-2.5 text-left text-[11px] font-extrabold tracking-[0.08em] text-navy">LONG RUN (MI)</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.email} className="border-b border-line last:border-0">
-                    <td className="px-4 py-2">
-                      <div className="text-[13px] font-bold text-ink">{r.name}</div>
-                      <div className="text-[11px] text-muted">{r.email}</div>
+                {rows.map((r, i) => (
+                  <tr
+                    key={r.email}
+                    className={`border-b border-line last:border-0 ${
+                      r.group !== r.wasGroup ? "bg-orange-soft/60" : i % 2 ? "bg-page/60" : ""
+                    }`}
+                  >
+                    <td className="px-4 py-2.5">
+                      <div className="text-[14px] font-bold text-ink">{r.name}</div>
+                      <div className="text-[11.5px] font-medium text-ink-2">{r.email}</div>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5">
                       <GroupToggle
                         value={r.group}
                         moved={r.group !== r.wasGroup}
                         onChange={(g) => setRow(r.email, { group: g })}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5">
                       <MileageBox
                         value={r.goal}
                         saved={r.savedGoal}
@@ -788,7 +872,7 @@ export function WeekBuilder({
                         }}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5">
                       <MileageBox
                         value={r.longRun}
                         saved={r.savedLongRun}
@@ -808,19 +892,22 @@ export function WeekBuilder({
         )}
 
         {data.pending.length > 0 && (
-          <div className="border-t border-line px-4 py-3">
-            <p className="text-[11px] font-extrabold tracking-[0.06em] text-muted">
+          <div className="border-t-[1.5px] border-line bg-page px-4 py-3.5">
+            <p className="text-[11px] font-extrabold tracking-[0.08em] text-orange-ink">
               ON THE ROSTER, NO ACCOUNT YET — {data.pending.length}
             </p>
-            <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+            <ul className="mt-2 flex flex-wrap gap-x-2 gap-y-1.5">
               {data.pending.map((a) => (
-                <li key={a.email} className="text-[13px] text-ink-2">
+                <li
+                  key={a.email}
+                  className="rounded-lg border-[1.5px] border-dashed border-orange/40 bg-orange-soft px-2.5 py-1 text-[13px]"
+                >
                   <span className="font-bold text-ink">{a.name}</span>{" "}
-                  <span className="text-muted">{a.email}</span>
+                  <span className="font-medium text-ink-2">{a.email}</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-1.5 text-[12px] leading-snug text-ink-2">
+            <p className="mt-2 text-[12.5px] font-medium leading-snug text-ink-2">
               They can sign up — they&apos;re on the allowlist — but a goal needs an
               account to live on, so they&apos;ll appear in the grid above the moment
               they create one. Post the week now; their goals can go in next week,
@@ -831,22 +918,22 @@ export function WeekBuilder({
       </Card>
 
       {/* --------------------------------------------------------- post --- */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border-[1.5px] border-line bg-white px-4 py-3.5">
         <button
           type="button"
           onClick={() => setStage("review")}
           disabled={fieldErrors.length > 0}
-          className="rounded-xl bg-orange px-5 py-2.5 text-sm font-extrabold text-white hover:bg-orange/90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-xl bg-orange px-5 py-2.5 text-[15px] font-extrabold text-white shadow-sm hover:bg-orange/90 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60"
         >
           Check it over
         </button>
         {fieldErrors.length > 0 ? (
-          <p className="text-[13px] font-semibold text-orange-ink">
+          <p className="text-[13.5px] font-bold text-orange-ink">
             {fieldErrors.length} {fieldErrors.length === 1 ? "box needs" : "boxes need"} fixing first —{" "}
             {[...new Set(fieldErrors.map((f) => f.short))].join(", ")}.
           </p>
         ) : (
-          <p className="text-[13px] text-ink-2">
+          <p className="text-[13.5px] font-medium text-ink-2">
             Nothing posts until you&apos;ve seen the summary.{" "}
             <Link href={`/coach/week?week=${prevWeekISO}`} className="font-bold text-orange hover:underline">
               Previous week
