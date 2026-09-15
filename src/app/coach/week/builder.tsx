@@ -97,6 +97,7 @@ function WeekBanner({
   alreadyPosted,
   prevWeekISO,
   nextWeekISO,
+  openedAhead,
   compact,
 }: {
   weekStartISO: string;
@@ -104,6 +105,7 @@ function WeekBanner({
   alreadyPosted: boolean;
   prevWeekISO?: string;
   nextWeekISO?: string;
+  openedAhead?: boolean;
   compact?: boolean;
 }) {
   const monday = fromISO(weekStartISO);
@@ -172,6 +174,12 @@ function WeekBanner({
           : "Nothing is posted for this week yet."}
         {isPast && " This week has already been run."}
       </p>
+
+      {openedAhead && (
+        <p className="mt-1 text-[12px] font-semibold text-muted">
+          Opened on the week ahead — from Sunday midday the builder moves on to the week coming. Use “This week” above if you meant the one finishing.
+        </p>
+      )}
     </section>
   );
 }
@@ -324,12 +332,14 @@ export function WeekBuilder({
   currentMondayISO,
   prevWeekISO,
   nextWeekISO,
+  openedAhead,
 }: {
   data: BuilderWeek;
   weekStartISO: string;
   currentMondayISO: string;
   prevWeekISO: string;
   nextWeekISO: string;
+  openedAhead: boolean;
 }) {
   const [plans, setPlans] = useState<Plans>(() => ({
     distance: [...data.plans.distance],
@@ -648,6 +658,7 @@ export function WeekBuilder({
         alreadyPosted={data.alreadyPosted}
         prevWeekISO={prevWeekISO}
         nextWeekISO={nextWeekISO}
+        openedAhead={openedAhead}
       />
 
       {serverErrors.length > 0 && (

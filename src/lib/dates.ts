@@ -94,3 +94,36 @@ export function hourET(): number {
   }).formatToParts(new Date()).find((p) => p.type === "hour")?.value;
   return Number(h) % 24;
 }
+
+/** Noon Sunday: the hour the coach's week flips from "the one finishing" to
+ *  "the one coming". Before it he may still be posting a correction to the
+ *  week in progress; after it, everything he opens the builder for is next
+ *  week. */
+export const POSTING_WEEK_FLIP_HOUR = 12;
+
+/**
+ * Which Monday the coach is posting for, given a day and an hour.
+ *
+ * Pure so it can be tested at every boundary — the wrapper below supplies the
+ * real Eastern clock.
+ *
+ * Deliberately built on the CALENDAR day rather than trainingTodayET(). The
+ * 3 AM rollover exists because athletes log runs after midnight, and it is
+ * right for logging; applying it here would mean a coach opening the builder
+ * at 1 AM Monday lands on the week that just finished, two hours after the
+ * same screen correctly offered him the week ahead.
+ */
+export function postingWeekMondayFrom(today: Date, hour: number): Date {
+  const isSunday = today.getDay() === 0;
+  if (isSunday && hour >= POSTING_WEEK_FLIP_HOUR) {
+    // Sunday afternoon — mondayOf(Sunday) is the week that ends today.
+    return addDays(mondayOf(today), 7);
+  }
+  return mondayOf(today);
+}
+
+/** The week the builder opens on. Sunday from noon, it is the week ahead;
+ *  from then until the following Saturday night it stays that same week. */
+export function postingWeekMonday(): Date {
+  return postingWeekMondayFrom(todayET(), hourET());
+}

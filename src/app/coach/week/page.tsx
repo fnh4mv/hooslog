@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getWeekBuilder } from "@/lib/queries";
-import { addDays, fromISO, isoDate, mondayOf, trainingTodayET } from "@/lib/dates";
+import { addDays, fromISO, isoDate, mondayOf, postingWeekMonday, todayET } from "@/lib/dates";
 import { CoachHeader } from "../header";
 import { WeekBuilder } from "./builder";
 
@@ -18,15 +18,26 @@ export default async function WeekBuilderPage({ searchParams }: PageProps<"/coac
   const sp = await searchParams;
   const supabase = await createClient();
 
-  const today = trainingTodayET();
-  const currentMonday = mondayOf(today);
+  // The builder reasons in CALENDAR weeks, not training days. The 3 AM
+  // rollover is right for logging — an athlete's 12:40 AM run belongs to
+  // yesterday — but a coach opening this screen at 1 AM Monday is posting the
+  // week that starts that morning, and "this week" must agree with the default
+  // below or the banner contradicts itself across midnight.
+  const currentMonday = mondayOf(todayET());
   const weekParam = typeof sp.week === "string" ? fromISO(sp.week) : null;
+  // From noon on Sunday the builder opens on the week AHEAD, and stays on it
+  // for the rest of that week (William, 2026-09-15). Before then it opens on
+  // the week in progress, which is still the one a correction would apply to.
+  const defaultMonday = postingWeekMonday();
   // Any date the coach lands on is snapped to its Monday. A week that does not
   // start on a Monday is not expressible here — one of the things the
   // spreadsheet let him type by hand.
-  const weekStart = weekParam ? mondayOf(weekParam) : currentMonday;
+  const weekStart = weekParam ? mondayOf(weekParam) : defaultMonday;
   const weekISO = isoDate(weekStart);
   const currentISO = isoDate(currentMonday);
+  // Did we move him forward on our own? If so the banner says so, rather than
+  // letting a coach wonder why the dates aren't the ones he expected.
+  const openedAhead = !weekParam && weekISO !== currentISO;
 
   const data = await getWeekBuilder(supabase, weekISO);
 
@@ -60,6 +71,7 @@ export default async function WeekBuilderPage({ searchParams }: PageProps<"/coac
           currentMondayISO={currentISO}
           prevWeekISO={isoDate(addDays(weekStart, -7))}
           nextWeekISO={isoDate(addDays(weekStart, 7))}
+          openedAhead={openedAhead}
         />
       </main>
     </div>
